@@ -1,3 +1,22 @@
+## [0.1.6] - 2026-02-24
+
+### Summary
+
+refactor(docs): docs module improvements
+
+### Docs
+
+- docs: update README
+
+### Build
+
+- update pyproject.toml
+
+### Other
+
+- update meshpi/systemd.py
+
+
 ## [0.1.5] - 2026-02-24
 
 ### Summary

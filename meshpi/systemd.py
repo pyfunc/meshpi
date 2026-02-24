@@ -32,7 +32,7 @@ USER_SYSTEMD_DIR = Path.home() / ".config" / "systemd" / "user"
 DAEMON_SERVICE = """\
 [Unit]
 Description=MeshPi Client Daemon
-Documentation=https://github.com/softreck/meshpi
+Documentation=https://github.com/pyfunc/meshpi
 After=network-online.target
 Wants=network-online.target
 
@@ -54,7 +54,7 @@ WantedBy=multi-user.target
 HOST_SERVICE = """\
 [Unit]
 Description=MeshPi Host Service
-Documentation=https://github.com/softreck/meshpi
+Documentation=https://github.com/pyfunc/meshpi
 After=network-online.target
 Wants=network-online.target
 

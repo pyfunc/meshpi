@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "meshpi"
-version = "0.1.5"
+version = "0.1.6"
 description = "Zero-touch Raspberry Pi mesh configuration tool"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -51,8 +51,8 @@ dev = [
 meshpi = "meshpi.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/softreck/meshpi"
-Repository = "https://github.com/softreck/meshpi"
+Homepage = "https://github.com/pyfunc/meshpi"
+Repository = "https://github.com/pyfunc/meshpi"
 
 [tool.setuptools.packages.find]
 where = ["."]

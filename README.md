@@ -5,7 +5,7 @@ categories: [open-source, iot, raspberry-pi, python]
 tags: [meshpi, rpi, automation, llm, gpio, hardware-profiles, fleet-management]
 status: active
 version: "0.2.0"
-repo: https://github.com/softreck/meshpi
+repo: https://github.com/pyfunc/meshpi
 license: Apache-2.0
 ---
 
@@ -224,7 +224,7 @@ The following features are planned for upcoming releases:
 
 ## Links
 
-- **Repository:** [github.com/softreck/meshpi](https://github.com/softreck/meshpi)
+- **Repository:** [github.com/pyfunc/meshpi](https://github.com/pyfunc/meshpi)
 - **License:** Apache 2.0
 - **Author:** [Softreck](https://softreck.dev) — embedded systems, IoT automation, hardware prototyping
 - **Related projects:** [Portigen.com](https://portigen.com) (portable power stations), [Prototypowanie.pl](https://prototypowanie.pl) (PCB prototyping)
