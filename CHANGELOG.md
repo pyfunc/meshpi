@@ -1,3 +1,20 @@
+## [0.1.18] - 2026-02-24
+
+### Summary
+
+feat(docs): CLI interface improvements
+
+### Docs
+
+- docs: update RPI-TESTING-README.md
+
+### Other
+
+- update meshpi/cli.py
+- update meshpi/ssh_manager.py
+- scripts: update rpi-service-manager.sh
+
+
 ## [0.1.17] - 2026-02-24
 
 ### Summary

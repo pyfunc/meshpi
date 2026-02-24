@@ -660,32 +660,373 @@ def cmd_restart(target: str | None, password: bool, key: str | None, service: st
                     break
             
             if not service_found:
-                console.print(f"[yellow]⚠ No MeshPi service found. Trying manual restart...[/yellow]")
+                console.print(f"[yellow]⚠ No MeshPi service found. Trying to start MeshPi...[/yellow]")
                 
-                # Try to find and kill meshpi processes
-                exit_code, stdout, stderr = doctor.run_command("pgrep -f meshpi")
+                # Try to start MeshPi using multiple methods
+                console.print("[cyan]→ Attempting to start MeshPi service...[/cyan]")
+                
+                # Method 1: Try starting meshpi host directly
+                exit_code, stdout, stderr = doctor.run_command(r"command -v meshpi >/dev/null 2>&1 && nohup meshpi host > /tmp/meshpi-host.log 2>&1 & echo \$! > /tmp/meshpi-host.pid")
                 if exit_code == 0:
-                    console.print("[yellow]→ Found MeshPi processes, stopping them...[/yellow]")
-                    doctor.run_command("pkill -f meshpi")
-                    console.print("[green]✓ MeshPi processes stopped[/green]")
-                    
-                    # Check if there's a startup script or systemd service
-                    exit_code, stdout, stderr = doctor.run_command("ls /etc/systemd/system/meshpi*.service 2>/dev/null")
-                    if exit_code == 0:
-                        console.print("[cyan]→ Found systemd services, restarting...[/cyan]")
-                        services = stdout.strip().split('\n')
-                        for svc_file in services:
-                            svc_name = svc_file.split('/')[-1].replace('.service', '')
-                            doctor.run_command(f"sudo systemctl restart {svc_name}")
-                    else:
-                        console.print("[yellow]⚠ No automatic restart available. Manual restart may be needed.[/yellow]")
-                        console.print("[dim]Try: meshpi host (on the device)[/dim]")
+                    console.print("[green]✓ MeshPi host started in background[/green]")
                 else:
-                    console.print("[yellow]⚠ No MeshPi processes found running[/yellow]")
-                    console.print("[dim]MeshPi may not be running. Try starting it with 'meshpi host'[/dim]")
+                    # Method 2: Try with virtual environment
+                    exit_code, stdout, stderr = doctor.run_command(r"[ -d /home/pi/meshpi-env ] && source /home/pi/meshpi-env/bin/activate && nohup meshpi host > /tmp/meshpi-host.log 2>&1 & echo \$! > /tmp/meshpi-host.pid")
+                    if exit_code == 0:
+                        console.print("[green]✓ MeshPi host started in virtual environment[/green]")
+                    else:
+                        # Method 3: Try with python directly
+                        exit_code, stdout, stderr = doctor.run_command(r"[ -f /home/pi/meshpi-env/bin/python ] && nohup /home/pi/meshpi-env/bin/python -m meshpi host > /tmp/meshpi-python.log 2>&1 & echo \$! > /tmp/meshpi-python.pid")
+                        if exit_code == 0:
+                            console.print("[green]✓ MeshPi started with Python directly[/green]")
+                        else:
+                            console.print("[yellow]⚠ Could not start MeshPi automatically[/yellow]")
+                            console.print("[dim]Try running the service manager:[/dim]")
+                            console.print("[dim]  ./rpi-service-manager.sh pi@192.168.188.148[/dim]")
+                            console.print("[dim]Or start manually:[/dim]")
+                            console.print("[dim]  ssh pi@192.168.188.148[/dim]")
+                            console.print("[dim]  source /home/pi/meshpi-env/bin/activate[/dim]")
+                            console.print("[dim]  meshpi host[/dim]")
 
     doctor.disconnect()
     console.print("\n[green]✓ Restart operation completed[/green]")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# meshpi ssh
+# ─────────────────────────────────────────────────────────────────────────────
+
+@main.group("ssh")
+def cmd_ssh():
+    """SSH device management for Raspberry Pi fleet."""
+    pass
+
+
+@cmd_ssh.command("scan")
+@click.option("--network", default="192.168.1.0/24", help="Network range to scan")
+@click.option("--user", default="pi", help="Default SSH username")
+@click.option("--port", default=22, help="SSH port")
+@click.option("--timeout", default=5, help="Connection timeout")
+@click.option("--add", is_flag=True, default=False, help="Add discovered devices to management")
+def cmd_ssh_scan(network: str, user: str, port: int, timeout: int, add: bool):
+    """Scan network for SSH-enabled Raspberry Pi devices."""
+    from .ssh_manager import SSHManager
+    
+    manager = SSHManager()
+    devices = manager.scan_network(network, user, port, timeout)
+    
+    if not devices:
+        console.print("[yellow]No SSH devices found[/yellow]")
+        return
+    
+    console.print(f"\n[green]Found {len(devices)} SSH device(s):[/green]")
+    
+    table = Table(border_style="cyan")
+    table.add_column("Host", style="bold")
+    table.add_column("User", style="dim")
+    table.add_column("Port", style="dim")
+    
+    for device in devices:
+        table.add_row(device.host, device.user, str(device.port))
+    
+    console.print(table)
+    
+    if add and Confirm.ask(f"\nAdd {len(devices)} device(s) to management?", default=False):
+        for device in devices:
+            manager.add_device(device)
+        
+        # Save device list
+        manager.save_device_list(str(Path.home() / ".meshpi" / "ssh_devices.json"))
+
+
+@cmd_ssh.command("add")
+@click.argument("target")
+@click.option("--name", help="Device name for identification")
+@click.option("--tags", help="Comma-separated tags")
+def cmd_ssh_add(target: str, name: Optional[str], tags: Optional[str]):
+    """Add SSH device to management."""
+    from .ssh_manager import SSHManager, SSHDevice, parse_device_target
+    
+    user, host, port = parse_device_target(target)
+    device = SSHDevice(host, user, port, name, tags.split(",") if tags else [])
+    
+    manager = SSHManager()
+    manager.add_device(device)
+    manager.save_device_list(str(Path.home() / ".meshpi" / "ssh_devices.json"))
+
+
+@cmd_ssh.command("list")
+@click.option("--refresh", is_flag=True, default=False, help="Refresh device information")
+def cmd_ssh_list(refresh: bool):
+    """List managed SSH devices."""
+    from .ssh_manager import SSHManager
+    from pathlib import Path
+    
+    manager = SSHManager()
+    devices_file = Path.home() / ".meshpi" / "ssh_devices.json"
+    
+    if devices_file.exists():
+        manager.load_device_list(str(devices_file))
+    
+    if not manager.devices:
+        console.print("[yellow]No devices managed yet[/yellow]")
+        console.print("[dim]Use 'meshpi ssh add' or 'meshpi ssh scan --add' to add devices[/dim]")
+        return
+    
+    manager.list_devices_table()
+
+
+@cmd_ssh.command("connect")
+@click.argument("target", required=False)
+@click.option("--password", is_flag=True, default=False, help="Use password authentication")
+@click.option("--key", help="Path to SSH private key")
+@click.option("--all", is_flag=True, default=False, help="Connect to all devices")
+def cmd_ssh_connect(target: Optional[str], password: bool, key: Optional[str], all: bool):
+    """Connect to SSH device(s)."""
+    from .ssh_manager import SSHManager, SSHDevice, parse_device_target
+    from pathlib import Path
+    import getpass
+    
+    manager = SSHManager()
+    devices_file = Path.home() / ".meshpi" / "ssh_devices.json"
+    
+    if devices_file.exists():
+        manager.load_device_list(str(devices_file))
+    
+    if all:
+        devices_to_connect = manager.devices
+    elif target:
+        user, host, port = parse_device_target(target)
+        device = SSHDevice(host, user, port)
+        devices_to_connect = [device]
+    else:
+        console.print("[red]Error: Specify target or use --all[/red]")
+        return
+    
+    ssh_password = None
+    if password:
+        ssh_password = getpass.getpass("Enter SSH password: ")
+    
+    connected_count = 0
+    for device in devices_to_connect:
+        console.print(f"[cyan]→[/cyan] Connecting to {device}...")
+        if manager.connect_to_device(device, password=ssh_password, key_path=key):
+            console.print(f"[green]✓ Connected to {device}[/green]")
+            connected_count += 1
+        else:
+            console.print(f"[red]✗ Failed to connect to {device}[/red]")
+    
+    console.print(f"\n[green]Connected to {connected_count}/{len(devices_to_connect)} devices[/green]")
+    
+    # Show device info for connected devices
+    if connected_count > 0:
+        console.print("\n[bold]Device Information:[/bold]")
+        for device in devices_to_connect:
+            if device._connected:
+                info = manager.get_device_info(device)
+                console.print(f"\n[bold]{device}[/bold]")
+                console.print(f"  Hostname: {info.get('hostname', 'N/A')}")
+                console.print(f"  Uptime: {info.get('uptime', 'N/A')}")
+                console.print(f"  CPU Temp: {info.get('cpu_temp', 'N/A')}")
+                console.print(f"  MeshPi: {info.get('meshpi_version', 'N/A')}")
+        
+        # Keep connections open for interactive use
+        console.print("\n[dim]Connections active. Press Ctrl+C to disconnect.[/dim]")
+        try:
+            import time
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Disconnecting...[/yellow]")
+            for device in devices_to_connect:
+                manager.disconnect_device(device)
+            console.print("[green]✓ All devices disconnected[/green]")
+
+
+@cmd_ssh.command("exec")
+@click.argument("command")
+@click.option("--target", help="Specific device (user@host:port)")
+@click.option("--parallel", is_flag=True, default=True, help="Run in parallel")
+def cmd_ssh_exec(command: str, target: Optional[str], parallel: bool):
+    """Execute command on SSH device(s)."""
+    from .ssh_manager import SSHManager, parse_device_target
+    from pathlib import Path
+    
+    manager = SSHManager()
+    devices_file = Path.home() / ".meshpi" / "ssh_devices.json"
+    
+    if devices_file.exists():
+        manager.load_device_list(str(devices_file))
+    
+    # Filter devices if target specified
+    if target:
+        user, host, port = parse_device_target(target)
+        manager.devices = [d for d in manager.devices if d.host == host and d.user == user and d.port == port]
+    
+    if not manager.devices:
+        console.print("[red]No devices available[/red]")
+        return
+    
+    # Connect to all devices
+    console.print("[cyan]→[/cyan] Connecting to devices...")
+    for device in manager.devices:
+        manager.connect_to_device(device)
+    
+    # Execute command
+    console.print(f"[cyan]→[/cyan] Executing: [bold]{command}[/bold]")
+    results = manager.run_command_on_all(command, parallel=parallel)
+    
+    # Display results
+    table = Table(title="Command Results", border_style="cyan")
+    table.add_column("Device", style="bold")
+    table.add_column("Exit Code", style="dim")
+    table.add_column("Output")
+    table.add_column("Error", style="red")
+    
+    for device, (exit_code, stdout, stderr) in results.items():
+        exit_status = "[green]0[/green]" if exit_code == 0 else f"[red]{exit_code}[/red]"
+        output = stdout[:100] + "..." if len(stdout) > 100 else stdout
+        error = stderr[:50] + "..." if len(stderr) > 50 else stderr
+        
+        table.add_row(str(device), exit_status, output, error)
+    
+    console.print(table)
+    
+    # Disconnect
+    for device in manager.devices:
+        manager.disconnect_device(device)
+
+
+@cmd_ssh.command("install")
+@click.option("--target", help="Specific device (user@host:port)")
+@click.option("--method", default="pip", type=click.Choice(["pip", "venv"]), help="Installation method")
+def cmd_ssh_install(target: Optional[str], method: str):
+    """Install MeshPi on SSH device(s)."""
+    from .ssh_manager import SSHManager, parse_device_target
+    from pathlib import Path
+    
+    manager = SSHManager()
+    devices_file = Path.home() / ".meshpi" / "ssh_devices.json"
+    
+    if devices_file.exists():
+        manager.load_device_list(str(devices_file))
+    
+    # Filter devices if target specified
+    if target:
+        user, host, port = parse_device_target(target)
+        manager.devices = [d for d in manager.devices if d.host == host and d.user == user and d.port == port]
+    
+    if not manager.devices:
+        console.print("[red]No devices available[/red]")
+        return
+    
+    # Connect and install
+    for device in manager.devices:
+        if manager.connect_to_device(device):
+            manager.install_meshpi_on_device(device, method)
+            manager.disconnect_device(device)
+
+
+@cmd_ssh.command("update")
+@click.option("--target", help="Specific device (user@host:port)")
+def cmd_ssh_update(target: Optional[str]):
+    """Update MeshPi on SSH device(s)."""
+    from .ssh_manager import SSHManager, parse_device_target
+    from pathlib import Path
+    
+    manager = SSHManager()
+    devices_file = Path.home() / ".meshpi" / "ssh_devices.json"
+    
+    if devices_file.exists():
+        manager.load_device_list(str(devices_file))
+    
+    # Filter devices if target specified
+    if target:
+        user, host, port = parse_device_target(target)
+        manager.devices = [d for d in manager.devices if d.host == host and d.user == user and d.port == port]
+    
+    if not manager.devices:
+        console.print("[red]No devices available[/red]")
+        return
+    
+    # Connect and update
+    for device in manager.devices:
+        if manager.connect_to_device(device):
+            manager.update_meshpi_on_device(device)
+            manager.disconnect_device(device)
+
+
+@cmd_ssh.command("restart")
+@click.option("--target", help="Specific device (user@host:port)")
+@click.option("--service", default="meshpi-daemon", help="Service name to restart")
+def cmd_ssh_restart(target: Optional[str], service: str):
+    """Restart MeshPi service on SSH device(s)."""
+    from .ssh_manager import SSHManager, parse_device_target
+    from pathlib import Path
+    
+    manager = SSHManager()
+    devices_file = Path.home() / ".meshpi" / "ssh_devices.json"
+    
+    if devices_file.exists():
+        manager.load_device_list(str(devices_file))
+    
+    # Filter devices if target specified
+    if target:
+        user, host, port = parse_device_target(target)
+        manager.devices = [d for d in manager.devices if d.host == host and d.user == user and d.port == port]
+    
+    if not manager.devices:
+        console.print("[red]No devices available[/red]")
+        return
+    
+    # Connect and restart
+    for device in manager.devices:
+        if manager.connect_to_device(device):
+            manager.restart_meshpi_on_device(device, service)
+            manager.disconnect_device(device)
+
+
+@cmd_ssh.command("transfer")
+@click.argument("local_path")
+@click.argument("remote_path")
+@click.option("--target", help="Specific device (user@host:port)")
+@click.option("--download", is_flag=True, default=False, help="Download from device instead of upload")
+def cmd_ssh_transfer(local_path: str, remote_path: str, target: Optional[str], download: bool):
+    """Transfer files to/from SSH device(s)."""
+    from .ssh_manager import SSHManager, parse_device_target
+    from pathlib import Path
+    
+    manager = SSHManager()
+    devices_file = Path.home() / ".meshpi" / "ssh_devices.json"
+    
+    if devices_file.exists():
+        manager.load_device_list(str(devices_file))
+    
+    # Filter devices if target specified
+    if target:
+        user, host, port = parse_device_target(target)
+        manager.devices = [d for d in manager.devices if d.host == host and d.user == user and d.port == port]
+    
+    if not manager.devices:
+        console.print("[red]No devices available[/red]")
+        return
+    
+    # Connect and transfer
+    for device in manager.devices:
+        if manager.connect_to_device(device):
+            if download:
+                success = manager.transfer_file_from_device(device, remote_path, local_path)
+                action = "downloaded from"
+            else:
+                success = manager.transfer_file_to_device(device, local_path, remote_path)
+                action = "uploaded to"
+            
+            if success:
+                console.print(f"[green]✓ File {action} {device}[/green]")
+            else:
+                console.print(f"[red]✗ Transfer failed for {device}[/red]")
+            
+            manager.disconnect_device(device)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -33,6 +33,9 @@ meshpi restart pi@192.168.188.148
 # Interactive device list and management
 meshpi ls
 
+# Comprehensive service management
+./rpi-service-manager.sh pi@192.168.188.148
+
 # Local diagnostics only
 meshpi doctor --local
 ```
@@ -64,6 +67,7 @@ meshpi doctor --local
 - `meshpi/doctor.py` - Enhanced doctor with auto-diagnosis and repair
 - `monitor-repair.sh` - RPi-side repair status monitor
 - `show-repair-status.sh` - Visual repair status display
+- `rpi-service-manager.sh` - Comprehensive service management
 - `test-doctor.sh` - Test script for doctor functionality
 - `test-restart.sh` - Test script for restart functionality
 - `test-list.sh` - Test script for list functionality
@@ -143,6 +147,15 @@ meshpi ls --scan
 
 # Show all devices including offline
 meshpi ls --all
+
+# Comprehensive service management
+./rpi-service-manager.sh pi@192.168.188.148
+
+# Service management actions
+./rpi-service-manager.sh pi@192.168.188.148 start
+./rpi-service-manager.sh pi@192.168.188.148 stop
+./rpi-service-manager.sh pi@192.168.188.148 restart
+./rpi-service-manager.sh pi@192.168.188.148 status
 
 # Local diagnostics only
 meshpi doctor --local
