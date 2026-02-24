@@ -1,71 +1,160 @@
-version: "3.8"
+# ─────────────────────────────────────────────────────────────────
+# MeshPi Docker Compose — complete test environment
+#
+# Services:
+#   meshpi-host      → host API server (port 7422)
+#   meshpi-client-1  → simulated RPi client #1
+#   meshpi-client-2  → simulated RPi client #2
+#   meshpi-test      → pytest test suite runner
+#
+# Usage:
+#   docker compose up --build               # run all services
+#   docker compose up meshpi-host           # host only
+#   docker compose run --rm meshpi-test     # run tests
+#   docker compose up meshpi-host meshpi-client-1  # host + 1 client
+#
+# Dashboard: http://localhost:7422/dashboard
+# API docs:  http://localhost:7422/docs
+# ─────────────────────────────────────────────────────────────────
 
 services:
-  # MeshPi Host Service
+
+  # ── Host ─────────────────────────────────────────────────────────
   meshpi-host:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: docker/host/Dockerfile
+    image: meshpi-host:latest
     container_name: meshpi-host
-    command: >
-      sh -c "echo -e 'HOSTNAME=meshpi-host-test\nWIFI_SSID=testnet\nWIFI_PASSWORD=testpass123' > /root/.meshpi/config.env && meshpi host --bind 0.0.0.0 --port 7422"
+    hostname: meshpi-host
     ports:
       - "7422:7422"
+    environment:
+      MESHPI_PORT: "7422"
+      MESHPI_BIND: "0.0.0.0"
+      # Pre-seed config via environment (no interactive wizard needed)
+      MESHPI_CFG_RPI_USER: "pi"
+      MESHPI_CFG_RPI_PASSWORD: "raspberry"
+      MESHPI_CFG_WIFI_SSID: "TestNetwork"
+      MESHPI_CFG_WIFI_PASSWORD: "testpassword"
+      MESHPI_CFG_WIFI_COUNTRY: "PL"
+      MESHPI_CFG_RPI_HOSTNAME: "meshpi-node"
+      MESHPI_CFG_RPI_TIMEZONE: "Europe/Warsaw"
+      MESHPI_CFG_RPI_LOCALE: "pl_PL.UTF-8"
+      MESHPI_CFG_RPI_KEYBOARD: "pl"
+      MESHPI_CFG_SSH_PUBLIC_KEY: "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAAAtest test@meshpi"
+    volumes:
+      - meshpi-host-keys:/root/.meshpi
     networks:
       meshpi-net:
-        ipv4_address: 172.28.0.10
-    environment:
-      - MESHPI_HOST=0.0.0.0
-      - MESHPI_PORT=7422
+        aliases:
+          - meshpi-host
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7422/health"]
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:7422/health', timeout=4).raise_for_status()"]
       interval: 10s
       timeout: 5s
+      start_period: 15s
       retries: 5
-      start_period: 10s
+    restart: unless-stopped
 
-  # MeshPi Client Service
-  meshpi-client:
+  # ── Simulated client #1 ──────────────────────────────────────────
+  meshpi-client-1:
     build:
       context: .
-      dockerfile: Dockerfile
-    container_name: meshpi-client
-    command: >
-      sh -c "sleep 5 && meshpi scan --host meshpi-host --port 7422 --dry-run"
-    depends_on:
-      meshpi-host:
-        condition: service_healthy
-    networks:
-      meshpi-net:
-        ipv4_address: 172.28.0.20
+      dockerfile: docker/client/Dockerfile
+    image: meshpi-client:latest
+    container_name: meshpi-client-1
+    hostname: rpi-node-01
     environment:
-      - MESHPI_HOST=meshpi-host
-      - MESHPI_PORT=7422
-
-  # Test runner
-  test-runner:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: meshpi-test
-    command: >
-      sh -c "pip install pytest && pytest /app/tests -v"
+      MESHPI_HOST_IP: "meshpi-host"
+      MESHPI_HOST_PORT: "7422"
+      MESHPI_DEVICE_ID: "rpi-node-01"
+      MESHPI_DRY_RUN: "1"
+      MESHPI_SIMULATE: "1"
     volumes:
-      - ./tests:/app/tests:ro
+      - meshpi-client-1-keys:/root/.meshpi
+    networks:
+      - meshpi-net
     depends_on:
       meshpi-host:
         condition: service_healthy
-    networks:
-      meshpi-net:
-        ipv4_address: 172.28.0.30
+    restart: unless-stopped
+
+  # ── Simulated client #2 ──────────────────────────────────────────
+  meshpi-client-2:
+    build:
+      context: .
+      dockerfile: docker/client/Dockerfile
+    image: meshpi-client:latest
+    container_name: meshpi-client-2
+    hostname: rpi-node-02
     environment:
-      - MESHPI_TEST_HOST=meshpi-host
-      - MESHPI_TEST_PORT=7422
+      MESHPI_HOST_IP: "meshpi-host"
+      MESHPI_HOST_PORT: "7422"
+      MESHPI_DEVICE_ID: "rpi-node-02"
+      MESHPI_DRY_RUN: "1"
+      MESHPI_SIMULATE: "1"
+    volumes:
+      - meshpi-client-2-keys:/root/.meshpi
+    networks:
+      - meshpi-net
+    depends_on:
+      meshpi-host:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── Test suite runner ────────────────────────────────────────────
+  meshpi-test:
+    build:
+      context: .
+      dockerfile: docker/test-env/Dockerfile
+    image: meshpi-test:latest
+    container_name: meshpi-test
+    environment:
+      MESHPI_HOST_IP: "meshpi-host"
+      MESHPI_HOST_PORT: "7422"
+    networks:
+      - meshpi-net
+    depends_on:
+      meshpi-host:
+        condition: service_healthy
+    profiles:
+      - test       # only runs with: docker compose --profile test up
+
+  # ── Integration test runner ─────────────────────────────────────
+  meshpi-integration:
+    build:
+      context: .
+      dockerfile: docker/test-env/Dockerfile
+    image: meshpi-test:latest
+    container_name: meshpi-integration
+    command: >
+      python -m pytest tests/integration/
+        -v --tb=short --color=yes
+        -k "integration"
+    environment:
+      MESHPI_HOST_IP: "meshpi-host"
+      MESHPI_HOST_PORT: "7422"
+      MESHPI_INTEGRATION: "1"
+    networks:
+      - meshpi-net
+    depends_on:
+      meshpi-host:
+        condition: service_healthy
+    profiles:
+      - integration
+
+volumes:
+  meshpi-host-keys:
+    driver: local
+  meshpi-client-1-keys:
+    driver: local
+  meshpi-client-2-keys:
+    driver: local
 
 networks:
   meshpi-net:
     driver: bridge
     ipam:
-      driver: default
       config:
         - subnet: 172.28.0.0/16

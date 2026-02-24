@@ -1,3 +1,30 @@
+## [0.1.7] - 2026-02-24
+
+### Summary
+
+refactor(build): configuration management system
+
+### Test
+
+- docker: update Dockerfile
+- update tests/test_integration.py
+- update tests/test_meshpi.py
+
+### Build
+
+- update pyproject.toml
+
+### Other
+
+- build: update Makefile
+- config: update ci.yml
+- docker: update Dockerfile
+- scripts: update entrypoint.sh
+- update fake_applier.py
+- update meshpi/__init__.py
+- update meshpi/systemd.py
+
+
 ## [0.1.6] - 2026-02-24
 
 ### Summary
