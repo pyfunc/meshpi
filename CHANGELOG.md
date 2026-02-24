@@ -1,3 +1,18 @@
+## [0.1.16] - 2026-02-24
+
+### Summary
+
+feat(tests): code quality metrics with 5 supporting modules
+
+### Docs
+
+- docs: update RPI-TESTING-README.md
+
+### Other
+
+- scripts: update batch-rpi-test.sh
+
+
 ## [0.1.15] - 2026-02-24
 
 ### Summary

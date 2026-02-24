@@ -7,7 +7,7 @@ This comprehensive testing suite validates MeshPi installation on different RPi 
 ### 🚀 Quick Start
 
 ```bash
-# Test all architectures locally
+# Test all architectures locally (Docker)
 ./run-rpi-tests.sh
 
 # Test specific architecture
@@ -17,6 +17,12 @@ This comprehensive testing suite validates MeshPi installation on different RPi 
 
 # Quick test (skip builds)
 ./run-rpi-tests.sh --quick
+
+# Test on real RPi hardware via SSH
+./remote-rpi-test.sh pi@192.168.1.100
+
+# Test multiple RPis simultaneously
+./batch-rpi-test.sh
 ```
 
 ### 📊 Architecture Coverage
@@ -38,7 +44,9 @@ This comprehensive testing suite validates MeshPi installation on different RPi 
 
 - `docker-compose.test-rpi.yml` - Multi-architecture Docker setup
 - `docker/test-rpi/` - Test scripts and utilities
-- `run-rpi-tests.sh` - Main test runner script
+- `run-rpi-tests.sh` - Main Docker test runner script
+- `remote-rpi-test.sh` - SSH test script for real RPi hardware
+- `batch-rpi-test.sh` - Batch testing script for multiple RPis
 - `.github/workflows/test-rpi-arch.yml` - CI/CD workflow
 - `docs/RPI-TESTING.md` - Comprehensive testing guide
 - `docs/RPI-TEST-RESULTS.md` - Test results and known issues
@@ -54,6 +62,16 @@ This comprehensive testing suite validates MeshPi installation on different RPi 
 - Docker with multi-architecture support (buildx)
 - Docker Compose
 - QEMU for cross-architecture emulation
+- **SSH enabled on RPi devices** (for remote testing):
+  ```bash
+  sudo raspi-config  # Interface Options → SSH → Enable
+  # OR: sudo systemctl enable --now ssh
+  ```
+- **SSH key distribution** (for remote testing):
+  ```bash
+  ssh-keygen -t rsa -b 4096 -C 'meshpi-testing' -f ~/.ssh/meshpi_test
+  ssh-copy-id -i ~/.ssh/meshpi_test.pub pi@<rpi-ip>
+  ```
 
 ### 📖 Documentation
 
@@ -64,14 +82,20 @@ This comprehensive testing suite validates MeshPi installation on different RPi 
 ### 🎯 Usage Examples
 
 ```bash
-# Full test suite
+# Full Docker test suite
 ./run-rpi-tests.sh --clean
 
-# Quick validation
+# Quick validation (Docker)
 ./run-rpi-tests.sh --quick --arch arm64v8
 
-# CI-style testing
+# CI-style testing (Docker)
 ./run-rpi-tests.sh --clean --sequential
+
+# Test on real RPi hardware via SSH
+./remote-rpi-test.sh pi@192.168.1.100
+
+# Batch test multiple RPis
+./batch-rpi-test.sh --devices "pi@rpi1.local pi@rpi2.local"
 
 # Generate report
 ./run-rpi-tests.sh && cat test-results/test-report-*.md
