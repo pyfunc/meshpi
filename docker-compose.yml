@@ -43,6 +43,9 @@ services:
       MESHPI_CFG_RPI_LOCALE: "pl_PL.UTF-8"
       MESHPI_CFG_RPI_KEYBOARD: "pl"
       MESHPI_CFG_SSH_PUBLIC_KEY: "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAAAtest test@meshpi"
+      # LLM Agent configuration (optional)
+      LITELLM_MODEL: "gpt-4o-mini"
+      # LITELLM_API_KEY: "sk-your-api-key-here"  # Uncomment and set for LLM features
     volumes:
       - meshpi-host-keys:/root/.meshpi
     networks:

@@ -1,0 +1,53 @@
+# 🎮 Retro Gaming Station
+# Complete retro gaming setup with emulators, game controllers, and gaming interface
+# Perfect for Raspberry Pi retro gaming console with multiple emulator support
+
+id: "retro_gaming_station"
+name: "Retro Gaming Station"
+category: "entertainment"
+description: "Complete retro gaming setup with RetroPie, emulators, game controller support, and gaming interface"
+
+# System packages required
+packages:
+  - "retroarch"
+  - "libretro-*"
+  - "sdl2"
+  - "python3-pip"
+  - "python3-dev"
+  - "git"
+  - "xmlstarlet"
+
+# Kernel modules to load
+kernel_modules:
+  - "joydev"
+  - "input-core"
+
+# Device tree overlays
+overlays: []
+
+# /boot/config.txt modifications
+config_txt_lines:
+  - "gpu_mem=256"
+  - "hdmi_force_hotplug=1"
+  - "hdmi_drive=2"
+
+# Post-installation commands
+post_commands:
+  - "pip3 install pygame"
+  - "pip3 install inputs"
+  - "pip3 evdev"
+  - "git clone https://github.com/RetroPie/RetroPie-Setup.git /tmp/retropie"
+  - "cd /tmp/retropie && chmod +x retropie_setup.sh && ./retropie_setup.sh basic_install && cd - && rm -rf /tmp/retropie"
+  - "usermod -a -G video,input,audio $USER"
+  - "echo 'Retro Gaming Station setup complete!'"
+
+# Tags for searching
+tags:
+  - "gaming"
+  - "retro"
+  - "emulation"
+  - "retropie"
+  - "entertainment"
+  - "gamepad"
+  - "console"
+  - "arcade"

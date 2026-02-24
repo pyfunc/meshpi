@@ -1,0 +1,51 @@
+# 🎩 Raspberry Pi Sense HAT
+# All-in-one environmental sensor board with LED matrix, joystick, and multiple sensors
+- Official Raspberry Pi Sense HAT with temperature, pressure, humidity, orientation sensors
+
+id: "rpi_sense_hat_complete"
+name: "Raspberry Pi Sense HAT"
+category: "hat"
+description: "Complete Raspberry Pi Sense HAT setup with environmental sensors, LED matrix, joystick, and Python libraries"
+
+# System packages required
+packages:
+  - "python3-pip"
+  - "python3-dev"
+  - "sense-hat"
+  - "python3-sense-emu"
+  - "python3-numpy"
+
+# Kernel modules to load
+kernel_modules:
+  - "i2c-dev"
+  - "i2c-bcm2708"
+
+# Device tree overlays
+overlays:
+  - "i2c-arm"
+
+# /boot/config.txt modifications
+config_txt_lines:
+  - "dtparam=i2c_arm=on"
+  - "dtparam=i2c_arm_baudrate=400000"
+
+# Post-installation commands
+post_commands:
+  - "pip3 install sense-hat"
+  - "pip3 install sense-emu"
+  - "pip3 install matplotlib"
+  - "pip3 install pillow"
+  - "i2cdetect -y 1"
+  - "usermod -a -G i2c,gpio $USER"
+  - "echo 'Raspberry Pi Sense HAT setup complete!'"
+
+# Tags for searching
+tags:
+  - "hat"
+  - "sense-hat"
+  - "i2c"
+  - "sensor"
+  - "led-matrix"
+  - "joystick"
+  - "environmental"
+  - "official"

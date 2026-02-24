@@ -26,6 +26,6 @@ LLM Agent (requires litellm):
     # or local: LITELLM_MODEL=ollama/llama3.2 meshpi agent
 """
 
-__version__ = "0.1.24"
+__version__ = "0.1.25"
 __author__ = "Softreck"
 __license__ = "Apache-2.0"

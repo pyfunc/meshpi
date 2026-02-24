@@ -1,0 +1,44 @@
+# 🔌 Relay Board Controller
+# 8-channel relay board with GPIO control for home automation and power switching
+# Ideal for smart home projects, industrial control, and high-power device management
+
+id: "relay_board_8channel"
+name: "8-Channel Relay Board Controller"
+category: "gpio"
+description: "8-channel relay board with GPIO control, safety features, and automation scripts for home and industrial applications"
+
+# System packages required
+packages:
+  - "python3-pip"
+  - "python3-dev"
+  - "python3-gpiozero"
+  - "python3-requests"
+
+# Kernel modules to load
+kernel_modules: []
+
+# Device tree overlays
+overlays: []
+
+# /boot/config.txt modifications
+config_txt_lines: []
+
+# Post-installation commands
+post_commands:
+  - "pip3 install RPi.GPIO"
+  - "pip3 install gpiozero"
+  - "pip3 install schedule"
+  - "pip3 install flask"
+  - "usermod -a -G gpio $USER"
+  - "echo '8-Channel Relay Board setup complete!'"
+
+# Tags for searching
+tags:
+  - "gpio"
+  - "relay"
+  - "automation"
+  - "home-automation"
+  - "power-control"
+  - "industrial"
+  - "switching"
+  - "8-channel"

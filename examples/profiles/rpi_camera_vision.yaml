@@ -1,0 +1,54 @@
+# 📷 Raspberry Pi Camera Module
+# Official Pi Camera v2/HQ with auto-focus, high-resolution video, and computer vision
+# Perfect for surveillance, timelapse, computer vision, and photography projects
+
+id: "rpi_camera_vision"
+name: "Raspberry Pi Camera Vision System"
+category: "camera"
+description: "Complete Raspberry Pi Camera setup with computer vision libraries, streaming, and image processing tools"
+
+# System packages required
+packages:
+  - "python3-pip"
+  - "python3-dev"
+  - "python3-picamera"
+  - "python3-opencv"
+  - "ffmpeg"
+  - "v4l-utils"
+  - "libcamera-apps"
+
+# Kernel modules to load
+kernel_modules:
+  - "bcm2835_v4l2"
+
+# Device tree overlays
+overlays:
+  - "camera"
+
+# /boot/config.txt modifications
+config_txt_lines:
+  - "start_x=1"
+  - "gpu_mem=128"
+  - "camera_auto_detect=1"
+
+# Post-installation commands
+post_commands:
+  - "pip3 install picamera[array]"
+  - "pip3 install opencv-python"
+  - "pip3 install pillow numpy"
+  - "pip3 install imutils"
+  - "pip3 install matplotlib"
+  - "v4l2-ctl --list-devices"
+  - "usermod -a -G video $USER"
+  - "echo 'Raspberry Pi Camera setup complete!'"
+
+# Tags for searching
+tags:
+  - "camera"
+  - "vision"
+  - "opencv"
+  - "photography"
+  - "surveillance"
+  - "timelapse"
+  - "computer-vision"
+  - "streaming"

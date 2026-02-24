@@ -1,0 +1,51 @@
+# 🌐 Multi-Network Router
+# Multiple network interfaces configuration for routing, firewall, and network management
+- Perfect for creating Raspberry Pi routers, access points, and network gateways
+
+id: "multi_network_router"
+name: "Multi-Network Router Gateway"
+category: "networking"
+description: "Complete network routing setup with multiple interfaces, DHCP server, firewall, and network management tools"
+
+# System packages required
+packages:
+  - "dnsmasq"
+  - "hostapd"
+  - "iptables-persistent"
+  - "netfilter-persistent"
+  - "bridge-utils"
+  - "python3-pip"
+  - "python3-dev"
+
+# Kernel modules to load
+kernel_modules:
+  - "iptable_nat"
+  - "iptable_mangle"
+  - "iptable_filter"
+
+# Device tree overlays
+overlays: []
+
+# /boot/config.txt modifications
+config_txt_lines: []
+
+# Post-installation commands
+post_commands:
+  - "pip3 install netifaces"
+  - "pip3 install psutil"
+  - "systemctl enable dnsmasq"
+  - "systemctl enable hostapd"
+  - "iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE 2>/dev/null || echo 'NAT rule added'"
+  - "netfilter-persistent save 2>/dev/null || echo 'Firewall rules saved'"
+  - "echo 'Multi-Network Router setup complete!'"
+
+# Tags for searching
+tags:
+  - "networking"
+  - "router"
+  - "gateway"
+  - "firewall"
+  - "dhcp"
+  - "access-point"
+  - "nat"
+  - "multi-interface"

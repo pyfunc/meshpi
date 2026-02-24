@@ -1,0 +1,47 @@
+# 🌡️ BME280 Environmental Sensor
+# Bosch BME280 sensor with I2C interface for temperature, humidity, and pressure
+# Ideal for weather stations, environmental monitoring, and IoT projects
+
+id: "bme280_weather_station"
+name: "BME280 Weather Station Sensor"
+category: "sensor"
+description: "Complete BME280 environmental sensor setup with I2C interface, calibration scripts, and data logging"
+
+# System packages required
+packages:
+  - "i2c-tools"
+  - "python3-smbus"
+  - "python3-pip"
+  - "python3-dev"
+
+# Kernel modules to load
+kernel_modules:
+  - "i2c-dev"
+  - "i2c-bcm2708"
+
+# Device tree overlays
+overlays:
+  - "i2c-arm"
+
+# /boot/config.txt modifications
+config_txt_lines:
+  - "dtparam=i2c_arm=on"
+  - "dtparam=i2c_arm_baudrate=400000"
+
+# Post-installation commands
+post_commands:
+  - "pip3 install adafruit-circuitpython-bme280"
+  - "pip3 install matplotlib pandas"
+  - "i2cdetect -y 1"
+  - "usermod -a -G i2c $USER"
+  - "echo 'BME280 sensor setup complete!'"
+
+# Tags for searching
+tags:
+  - "i2c"
+  - "sensor"
+  - "temperature"
+  - "humidity"
+  - "pressure"
+  - "weather"
+  - "environmental"

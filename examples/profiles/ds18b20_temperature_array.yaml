@@ -1,0 +1,53 @@
+# 📡 DS18B20 Temperature Sensor Array
+# Multiple DS18B20 1-Wire digital temperature sensors for distributed temperature monitoring
+# Perfect for multi-room temperature monitoring, industrial processes, and environmental control
+
+id: "ds18b20_temperature_array"
+name: "DS18B20 Temperature Sensor Array"
+category: "sensor"
+description: "Multiple DS18B20 1-Wire temperature sensors with automatic detection, data logging, and monitoring scripts"
+
+# System packages required
+packages:
+  - "python3-pip"
+  - "python3-dev"
+  - "python3-ow"
+  - "ow-shell"
+  - "w1thermsensor"
+
+# Kernel modules to load
+kernel_modules:
+  - "w1-gpio"
+  - "w1-therm"
+
+# Device tree overlays
+overlays:
+  - "w1-gpio"
+  - "w1-gpio-pullup"
+
+# /boot/config.txt modifications
+config_txt_lines:
+  - "dtoverlay=w1-gpio"
+  - "dtoverlay=w1-gpio-pullup,gpiopin=4"
+
+# Post-installation commands
+post_commands:
+  - "pip3 install w1thermsensor"
+  - "pip3 install matplotlib"
+  - "pip3 install pandas"
+  - "pip3 install schedule"
+  - "modprobe w1-gpio"
+  - "modprobe w1-therm"
+  - "ls /sys/bus/w1/devices/ | grep -E '^28' || echo 'DS18B20 sensors not detected yet'"
+  - "echo 'DS18B20 Temperature Array setup complete!'"
+
+# Tags for searching
+tags:
+  - "1-wire"
+  - "temperature"
+  - "sensor"
+  - "ds18b20"
+  - "monitoring"
+  - "array"
+  - "environmental"
+  - "distributed"

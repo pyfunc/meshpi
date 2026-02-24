@@ -1,3 +1,29 @@
+## [0.1.25] - 2026-02-24
+
+### Summary
+
+feat(examples): deep code analysis engine with 5 supporting modules
+
+### Docs
+
+- docs: update README
+- docs: update README
+
+### Other
+
+- update .env.example
+- config: update bme280_weather_station.yaml
+- config: update ds18b20_temperature_array.yaml
+- config: update i2s_pcm5102_audio_dac.yaml
+- config: update industrial_sensor_monitor.yaml
+- config: update lora_sx1276_wireless.yaml
+- config: update multi_network_router.yaml
+- config: update oled_ssd1306_status_display.yaml
+- config: update relay_board_8channel.yaml
+- config: update retro_gaming_station.yaml
+- ... and 4 more
+
+
 ## [0.1.24] - 2026-02-24
 
 ### Summary
@@ -111,8 +137,11 @@ refactor(repo): repository organization and script migration
 ### Docs
 
 - **README.md**: Added repository organization section with complete file structure
+- **README.md**: Added comprehensive environment variables section
 - **RPI-TESTING-README.md**: Updated all script references to new locations
 - **CHANGELOG.md**: Updated script path references
+- **.env.example**: Complete rewrite with all environment variables organized by category
+- **docker-compose.yml**: Added LLM agent environment variables
 
 ### Test
 

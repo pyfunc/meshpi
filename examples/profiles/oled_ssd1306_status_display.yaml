@@ -1,0 +1,54 @@
+# 🖥️ OLED SSD1306 Display
+# 128x64 OLED display with I2C interface for status display, monitoring, and small UI
+# Perfect for Raspberry Pi projects requiring visual feedback
+
+id: "oled_ssd1306_status_display"
+name: "OLED SSD1306 Status Display"
+category: "display"
+description: "128x64 OLED I2C display with Python graphics library, sample code, and automatic startup"
+
+# System packages required
+packages:
+  - "i2c-tools"
+  - "python3-pip"
+  - "python3-dev"
+  - "python3-pil"
+  - "libjpeg-dev"
+  - "zlib1g-dev"
+  - "libfreetype6-dev"
+  - "liblcms2-dev"
+  - "libopenjp2-7-dev"
+  - "libtiff5-dev"
+
+# Kernel modules to load
+kernel_modules:
+  - "i2c-dev"
+  - "i2c-bcm2708"
+
+# Device tree overlays
+overlays:
+  - "i2c-arm"
+
+# /boot/config.txt modifications
+config_txt_lines:
+  - "dtparam=i2c_arm=on"
+  - "dtparam=i2c_arm_baudrate=400000"
+
+# Post-installation commands
+post_commands:
+  - "pip3 install adafruit-circuitpython-ssd1306"
+  - "pip3 install pillow"
+  - "pip3 install luma-oled"
+  - "i2cdetect -y 1"
+  - "usermod -a -G i2c,gpio $USER"
+  - "echo 'OLED display setup complete! Address: 0x3C or 0x3D'"
+
+# Tags for searching
+tags:
+  - "i2c"
+  - "display"
+  - "oled"
+  - "ssd1306"
+  - "status"
+  - "monitoring"
+  - "graphics"

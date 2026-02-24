@@ -282,6 +282,68 @@ meshpi host                          → RSA key exchange
 
 ---
 
+## 🔧 Environment Variables
+
+MeshPi supports extensive configuration through environment variables. Copy `.env.example` to `.env` and customize.
+
+### 🐳 Docker & Deployment
+
+```bash
+# Host service
+MESHPI_PORT=7422
+MESHPI_BIND=0.0.0.0
+
+# Client configuration
+MESHPI_HOST_IP=localhost
+MESHPI_HOST_PORT=7422
+MESHPI_DEVICE_ID=meshpi-client
+```
+
+### 🔧 Configuration (MESHPI_CFG_*)
+
+Environment variables with `MESHPI_CFG_` prefix are automatically converted to `config.env`:
+
+```bash
+# WiFi
+MESHPI_CFG_WIFI_SSID="MyNetwork"
+MESHPI_CFG_WIFI_PASSWORD="MyPassword"
+MESHPI_CFG_WIFI_COUNTRY="PL"
+
+# SSH
+MESHPI_CFG_RPI_USER="pi"
+MESHPI_CFG_RPI_PASSWORD="raspberry"
+MESHPI_CFG_SSH_ENABLE="yes"
+
+# System
+MESHPI_CFG_RPI_HOSTNAME="meshpi-node"
+MESHPI_CFG_RPI_TIMEZONE="Europe/Warsaw"
+```
+
+### 🤖 LLM Agent
+
+```bash
+# LiteLLM configuration
+LITELLM_MODEL=gpt-4o-mini
+LITELLM_API_KEY=sk-...
+LITELLM_API_BASE=https://api.openai.com/v1
+
+# Alternative providers
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+### 📋 Complete Reference
+
+See [`.env.example`](.env.example) for all available variables including:
+- **Docker & Deployment**: Port, binding, client settings
+- **Configuration**: SSH, WiFi, hostname, hardware interfaces
+- **LLM Agent**: Multiple provider support
+- **Testing**: Test devices, SSH keys, timeouts
+- **Security**: Key paths, crypto settings
+- **Monitoring**: Log levels, file paths
+
+---
+
 ## 📁 Repository Organization
 
 ```

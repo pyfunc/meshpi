@@ -1,0 +1,47 @@
+# 🎮 USB Gamepad Controller
+# Generic USB gamepad/joystick configuration for gaming, robotics control, and input devices
+# Works with Xbox, PlayStation, and generic USB controllers
+
+id: "usb_gamepad_controller"
+name: "USB Gamepad Controller"
+category: "input"
+description: "USB gamepad/joystick setup with input device access, Python libraries, and game controller support"
+
+# System packages required
+packages:
+  - "python3-pip"
+  - "python3-dev"
+  - "joystick"
+  - "input-utils"
+  - "python3-evdev"
+
+# Kernel modules to load
+kernel_modules:
+  - "joydev"
+  - "input-core"
+
+# Device tree overlays
+overlays: []
+
+# /boot/config.txt modifications
+config_txt_lines: []
+
+# Post-installation commands
+post_commands:
+  - "pip3 install pygame"
+  - "pip3 inputs"
+  - "pip3 evdev"
+  - "jstest-gtk --version 2>/dev/null || echo 'jstest-gtk not available - optional'"
+  - "usermod -a -G input $USER"
+  - "echo 'USB gamepad controller setup complete!'"
+
+# Tags for searching
+tags:
+  - "usb"
+  - "gamepad"
+  - "joystick"
+  - "input"
+  - "gaming"
+  - "controller"
+  - "robotics"
+  - "control"
