@@ -309,19 +309,28 @@ def _get_local_ip() -> str:
 
 
 def _advertise_mdns(port: int) -> Zeroconf:
+    import uuid
     hostname = socket.gethostname()
+    # Add unique identifier to prevent name conflicts
+    unique_id = str(uuid.uuid4())[:8]
+    service_name = f"{hostname}-{unique_id}.{SERVICE_TYPE}"
     ip_bytes = socket.inet_aton(_get_local_ip())
     info = ServiceInfo(
         type_=SERVICE_TYPE,
-        name=f"{hostname}.{SERVICE_TYPE}",
+        name=service_name,
         addresses=[ip_bytes],
         port=port,
-        properties={b"version": b"0.2.0", b"host": hostname.encode()},
+        properties={b"version": b"0.2.0", b"host": hostname.encode(), b"id": unique_id.encode()},
         server=f"{hostname}.local.",
     )
     zc = Zeroconf()
-    zc.register_service(info)
-    console.print(f"[cyan]mDNS:[/cyan] [bold]{hostname}.{SERVICE_TYPE}[/bold]")
+    try:
+        zc.register_service(info)
+        console.print(f"[cyan]mDNS:[/cyan] [bold]{service_name}[/bold]")
+    except Exception as e:
+        console.print(f"[red]mDNS registration failed:[/red] {e}")
+        console.print("[yellow]Warning: Host will not be discoverable via mDNS[/yellow]")
+        console.print("[yellow]Clients can still connect directly using the IP address[/yellow]")
     return zc
 
 
