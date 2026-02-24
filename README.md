@@ -11,9 +11,38 @@ license: Apache-2.0
 
 # MeshPi — Zero-Touch Raspberry Pi Fleet Management
 
-**Status: Active development · v0.2.0 · Apache 2.0**
+<p align="center">
+  <a href="https://pypi.org/project/meshpi/">
+    <img src="https://img.shields.io/pypi/v/meshpi.svg" alt="PyPI version">
+  </a>
+  <a href="https://github.com/pyfunc/meshpi/actions">
+    <img src="https://github.com/pyfunc/meshpi/workflows/CI/badge.svg" alt="CI Status">
+  </a>
+  <a href="https://codecov.io/gh/pyfunc/meshpi">
+    <img src="https://codecov.io/gh/pyfunc/meshpi/branch/main/graph/badge.svg" alt="Code coverage">
+  </a>
+  <a href="https://github.com/pyfunc/meshpi/blob/main/LICENSE">
+    <img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License">
+  </a>
+  <a href="https://pypi.org/project/meshpi/">
+    <img src="https://img.shields.io/pypi/pyversions/meshpi.svg" alt="Python versions">
+  </a>
+  <a href="https://github.com/pyfunc/meshpi/issues">
+    <img src="https://img.shields.io/github/issues/pyfunc/meshpi.svg" alt="Issues">
+  </a>
+</p>
 
----
+<p align="center">
+  <strong>🚀 Zero-touch provisioning for Raspberry Pi fleets</strong><br>
+  <em>Configure WiFi, SSH, users, hardware peripherals, and manage devices — all through encrypted mesh networking</em>
+</p>
+
+<p align="center">
+  <a href="#installation"><strong>Installation</strong></a> •
+  <a href="#quick-start"><strong>Quick Start</strong></a> •
+  <a href="#features"><strong>Features</strong></a> •
+  <a href="#documentation"><strong>Documentation</strong></a>
+</p>
 
 ## What is MeshPi?
 
@@ -23,24 +52,25 @@ The project is built for embedded systems developers, IoT integrators, and hardw
 
 ---
 
-## The Problem It Solves
-
-Every fresh Raspberry Pi image requires the same manual steps: connecting a monitor, typing a WiFi password, setting up SSH, configuring locale and timezone, enabling interfaces like I2C and SPI, and installing drivers for attached hardware. Multiply this by dozens of devices and it becomes a significant time sink with high error rates.
-
-MeshPi replaces this process with two commands:
+## ✨ Quick Start
 
 ```bash
-# On the HOST machine (PC or dedicated RPi)
-meshpi config    # one-time wizard
-meshpi host      # start the service
+# Install MeshPi
+pip install meshpi
 
-# On each new CLIENT Raspberry Pi
-pip install meshpi && meshpi scan   # discovers host, configures itself, reboots
+# On HOST machine (your PC or a dedicated RPi)
+meshpi config    # One-time configuration wizard
+meshpi host      # Start the host service
+
+# On each CLIENT Raspberry Pi (fresh from factory)
+meshpi scan      # Auto-discover host, configure itself, and reboot
 ```
+
+> 🎯 **That's it!** Your Raspberry Pi is now configured with WiFi, SSH access, user accounts, and ready for hardware automation.
 
 ---
 
-## Architecture
+## 🏗️ Architecture
 
 MeshPi uses a host–client model with end-to-end RSA+AES-GCM encryption. No credentials ever travel in plaintext.
 
@@ -65,15 +95,15 @@ The host also exposes a **real-time web dashboard** at `/dashboard` and a full *
 
 ---
 
-## Key Features in v0.2.0
+## 🚀 Key Features
 
-### Encrypted zero-touch provisioning
+### 🔐 Encrypted Zero-Touch Provisioning
 Configuration is encrypted with AES-256-GCM. The session key is wrapped with the client's RSA-2048 public key. No shared secrets. No cleartext on the wire.
 
-### Real-time fleet management
+### 📡 Real-Time Fleet Management
 Once a device runs `meshpi daemon`, the host can push configuration changes, execute shell commands, apply hardware profiles, and trigger reboots — all through the WebSocket channel. The REST endpoint `POST /devices/{id}/push_config` delivers updates instantly without re-provisioning.
 
-### 49 hardware profiles across 8 categories
+### 🔧 49+ Hardware Profiles
 MeshPi ships with ready-to-apply profiles covering a wide range of peripherals:
 
 | Category | Examples |
@@ -93,7 +123,7 @@ Each profile installs apt packages, loads kernel modules, patches `/boot/config.
 meshpi hw apply oled_ssd1306_i2c sensor_bme280 gpio_stepper_arm69ak
 ```
 
-### LLM-powered NLP management agent
+### 🤖 LLM-Powered Management Agent
 The optional `meshpi[llm]` extra installs LiteLLM, enabling a conversational agent that understands natural language fleet management commands:
 
 ```
@@ -109,7 +139,7 @@ Agent: [pushes command] ✓ systemctl restart wpa_supplicant sent to rpi-kuchnia
 
 Works with any LiteLLM-compatible provider: OpenAI, Anthropic, Ollama (local), Azure, Groq, and more.
 
-### USB pendrive offline workflow
+### 💾 USB Pendrive Offline Workflow
 For air-gapped environments or devices without network access at first boot:
 
 ```bash
@@ -123,10 +153,10 @@ meshpi pendrive export
 meshpi pendrive apply
 ```
 
-### Full device diagnostics
+### 📊 Full Device Diagnostics
 `meshpi diag` collects CPU load, memory, temperature, GPIO pin states, I2C device scan, SPI status, USB devices, WiFi signal, running services, failed systemd units, recent error logs, top processes, and power/voltage status. All metrics are also pushed to the host automatically by the daemon.
 
-### Systemd integration
+### ⚙️ Systemd Integration
 Both the host service and client daemon can be installed as systemd services with a single flag:
 
 ```bash
@@ -136,7 +166,7 @@ meshpi daemon --install      # installs meshpi-daemon.service
 
 ---
 
-## Installation
+## 📦 Installation
 
 ```bash
 pip install meshpi                    # core
@@ -147,7 +177,7 @@ Python 3.9+ required. Works on any Linux system (host) and Raspberry Pi OS (clie
 
 ---
 
-## Project Structure
+## 🏛️ Project Structure
 
 ```
 meshpi/
@@ -175,7 +205,7 @@ meshpi/
 
 ---
 
-## Test Coverage
+## 🧪 Test Coverage
 
 The v0.2.0 release ships with **59 automated tests** covering:
 
@@ -193,7 +223,7 @@ pytest tests/ -v   # 59 passed in ~8s
 
 ---
 
-## Docker Support
+## 🐳 Docker Support
 
 MeshPi includes Docker support for testing and deployment:
 
@@ -211,7 +241,7 @@ docker-compose up meshpi-client  # runs scan in dry-run mode
 
 ---
 
-## Roadmap
+## 🗺️ Roadmap
 
 The following features are planned for upcoming releases:
 
@@ -222,12 +252,20 @@ The following features are planned for upcoming releases:
 
 ---
 
-## Links
+## 🔗 Links
 
 - **Repository:** [github.com/pyfunc/meshpi](https://github.com/pyfunc/meshpi)
 - **License:** Apache 2.0
 - **Author:** [Softreck](https://softreck.dev) — embedded systems, IoT automation, hardware prototyping
 - **Related projects:** [Portigen.com](https://portigen.com) (portable power stations), [Prototypowanie.pl](https://prototypowanie.pl) (PCB prototyping)
+
+## 📄 License
+
+Apache License 2.0 - see [LICENSE](LICENSE) for details.
+
+## 👤 Author
+
+Created by **Tom Sapletta** - [tom@sapletta.com](mailto:tom@sapletta.com)
 
 ## License
 

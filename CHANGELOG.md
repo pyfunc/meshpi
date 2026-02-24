@@ -1,3 +1,18 @@
+## [0.1.11] - 2026-02-24
+
+### Summary
+
+feat(docs): code quality metrics with 5 supporting modules
+
+### Docs
+
+- docs: update README
+
+### Build
+
+- update pyproject.toml
+
+
 ## [0.1.10] - 2026-02-24
 
 ### Summary

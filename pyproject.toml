@@ -4,15 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "meshpi"
-version = "0.1.10"
-description = "Zero-touch Raspberry Pi mesh configuration tool"
+version = "0.1.11"
+description = "🚀 Zero-touch provisioning for Raspberry Pi fleets - Configure WiFi, SSH, users, hardware peripherals, and manage devices through encrypted mesh networking"
 readme = "README.md"
 requires-python = ">=3.9"
 license = "Apache-2.0"
 authors = [
     { name = "Tom Sapletta", email = "tom@sapletta.com" },
 ]
-keywords = ["raspberry-pi", "mesh", "configuration", "iot", "automation"]
+keywords = ["raspberry-pi", "mesh", "configuration", "iot", "automation", "fleet-management", "zero-touch", "provisioning", "ssh", "wifi", "hardware", "gpio", "i2c", "spi"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
