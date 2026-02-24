@@ -35,7 +35,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                           🚀 MESHPI FLEET MANAGEMENT                           │
+│                           🚀 MESHPI FLEET MANAGEMENT                            │
 └─────────────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
@@ -59,21 +59,21 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                           🔥 FLOW PRACY MESHPI                                │
+│                           🔥 FLOW PRACY MESHPI                                   │
 └─────────────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────┐
 │  PLAN   │───▶│ KONFIG  │───▶│ WYBÓR   │───▶│ INSTAL  │───▶│ MONITOR │
 │         │    │         │    │         │    │         │    │         │
-│ Grupy   │    │ Urządzenia│    │ Profile │    │ Pakiety │    │ Metryki │
+│ Grupy   │    │ Urządz. │    │ Profile │    │ Pakiety │    │ Metryki │
 │ Profile │    │ SSH     │    │ Hardware│    │ Moduły  │    │ Alerty  │
-│ Scenariusz│   │ Sieć    │    │ Drivers │    │ Uprawnienia│ │ Logs    │
+│ Scenariz│    │ Sieć    │    │ Drivers │    │ Uprawn. │    │ Logs    │
 └─────────┘    └─────────┘    └─────────┘    └─────────┘    └─────────┘
 ```
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                         🏢 TYPOWE WDROŻENIE - BIURO                            │
+│                         🏢 TYPOWE WDROŻENIE - BIURO                             │
 └─────────────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────┐
@@ -88,18 +88,18 @@
 │                 │    │                 │    │                 │
 │ • BME280 Sensor │    │ • BME280 Sensor │    │ • BME280 Sensor │
 │ • OLED Display  │    │ • OLED Display  │    │ • OLED Display  │
-│ • WiFi Config  │    │ • WiFi Config  │    │ • WiFi Config  │
-│ • SSH Keys     │    │ • SSH Keys     │    │ • SSH Keys     │
+│ • WiFi Config   │    │ • WiFi Config  │    │ • WiFi Config  │
+│ • SSH Keys      │    │ • SSH Keys     │    │ • SSH Keys     │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
          │                       │                       │
          ▼                       ▼                       ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                         📊 PROMETHEUS + GRAFANA                              │
+│                         📊 PROMETHEUS + GRAFANA                                 │
 │                                                                                 │
-│ • CPU/Memory/Temperature Metrics                                               │
+│ • CPU/Memory/Temperature Metrics                                                │
 │ • Sensor Data (temp/humidity/pressure)                                          │
 │ • Device Status & Health                                                        │
-│ • Alert Rules (offline, high temp, low memory)                                 │
+│ • Alert Rules (offline, high temp, low memory)                                  │
 │ • Historical Data & Trends                                                      │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -124,15 +124,15 @@ All secured with **RSA-2048 + AES-256-GCM encryption**. No credentials ever trav
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                           🚀 QUICK START FLOW                                  │
+│                           🚀 QUICK START FLOW                                   │
 └─────────────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────┐         ┌─────────────────┐         ┌─────────────────┐
 │   HOST PC       │         │   MESHPI HOST   │         │ CLIENT RPi      │
 │                 │         │                 │         │                 │
 │ • Install MeshPi│ ──▶     │ • Config Wizard │ ──▶     │ • Scan & Join   │
-│ • Run Config   │         │ • Start Service │         │ • Auto-Setup    │
-│ • Start Host   │         │ • Port 7422     │         │ • Reboot Ready  │
+│ • Run Config    │         │ • Start Service │         │ • Auto-Setup    │
+│ • Start Host    │         │ • Port 7422     │         │ • Reboot Ready  │
 └─────────────────┘         └─────────────────┘         └─────────────────┘
 ```
 
@@ -156,11 +156,11 @@ meshpi scan      # Auto-discovers host, configures itself, reboots
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                         📱 RASPBERRY PI SETUP FLOW                             │
+│                         📱 RASPBERRY PI SETUP FLOW                              │
 └─────────────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│  FACTORY RPi    │───▶│  CONNECT NET   │───▶│  UPDATE SYSTEM │───▶│  SCAN & JOIN   │
+│  FACTORY RPi    │───▶│  CONNECT NET    │───▶│  UPDATE SYSTEM  │───▶│  SCAN & JOIN    │
 │                 │    │                 │    │                 │    │                 │
 │ • Fresh OS      │    │ • WiFi/Network  │    │ • apt update    │    │ • meshpi scan   │
 │ • Default Config│    │ • Internet      │    │ • apt upgrade   │    │ • Auto-discover │
@@ -252,13 +252,13 @@ pip3 install meshpi==0.1.14
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                           🔥 MESHPI FEATURE MATRIX                              │
+│                           🔥 MESHPI FEATURE MATRIX                               │
 └─────────────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │  ENCRYPTION     │    │  FLEET MGMT     │    │  HARDWARE       │    │  MONITORING     │
 │                 │    │                 │    │                 │    │                 │
-│ • RSA-2048      │    │ • WebSocket     │    │ • 49+ Profiles   │    │ • Prometheus    │
+│ • RSA-2048      │    │ • WebSocket     │    │ • 49+ Profiles  │    │ • Prometheus    │
 │ • AES-256-GCM   │    │ • Real-time     │    │ • Group Mgmt    │    │ • Grafana       │
 │ • mDNS Discovery│    │ • Push Updates  │    │ • Auto-Install  │    │ • Alerting      │
 │ • Zero-Touch    │    │ • Remote CMD    │    │ • Custom Config │    │ • Audit Logs    │
@@ -281,7 +281,7 @@ pip3 install meshpi==0.1.14
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                         🛠️ HARDWARE PROFILES CATALOG                           │
+│                         🛠️ HARDWARE PROFILES CATALOG                            │
 └─────────────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
@@ -298,7 +298,7 @@ pip3 install meshpi==0.1.14
 │                 │    │                 │    │                 │    │                 │
 │ • RPi Camera v2 │    │ • HiFiBerry DAC │    │ • CAN Bus       │    │ • Distance      │
 │ • USB UVC       │    │ • I2S Microphone│    │ • RS-485        │    │ • Ultrasonic    │
-│ • IR Night Vision│   │ • PWM Speakers  │    │ • LoRa          │    │ • IR Sensors    │
+│ • IR NightVision│    │ • PWM Speakers  │    │ • LoRa          │    │ • IR Sensors    │
 │ • MIPI CSI      │    │ • Bluetooth     │    │ • nRF24L01      │    │ • Touch Sensors │
 └─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
@@ -366,10 +366,10 @@ Collects CPU load, memory, temperature, GPIO states, I2C scan, USB devices, WiFi
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │   AUDIT LOGS    │    │  PROMETHEUS     │    │   ALERT ENGINE  │    │   GRAFANA       │
 │                 │    │                 │    │                 │    │                 │
-│ • JSONL Format │    │ • Metrics API   │    │ • 9 Rules       │    │ • Dashboards    │
+│ • JSONL Format  │    │ • Metrics API   │    │ • 9 Rules       │    │ • Dashboards    │
 │ • Operations    │    │ • Time Series   │    │ • Temperature   │    │ • Visualization │
 │ • Device Events │    │ • Device Health │    │ • Memory        │    │ • Historical    │
-│ • Timestamps   │    │ • System Stats  │    │ • Offline       │    │ • Alerting      │
+│ • Timestamps    │    │ • System Stats  │    │ • Offline       │    │ • Alerting      │
 └─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘
          │                       │                       │                       │
          ▼                       ▼                       ▼                       ▼
@@ -461,7 +461,7 @@ pip install "meshpi[all]"
 │ config.env      │                     │   ↓             │
 │                 │                     │ RSA key exchange│
 │ meshpi host     │◀────────────────────│   ↓             │
-│   ↓             │   Encrypted config │ Apply settings  │
+│   ↓             │   Encrypted config  │ Apply settings  │
 │ FastAPI API     │────────────────────▶│   ↓             │
 │   ↓             │                     │ Reboot          │
 │ WebSocket       │                     │   ↓             │
@@ -472,14 +472,14 @@ pip install "meshpi[all]"
 └─────────────────┘                     └─────────────────┘
 
                             ↕ Persistent Connection
-                    ┌─────────────────────────────────────────┐
+                    ┌────────────────────────────────────────┐
                     │           MESHPI DAEMON                │
-                    │                                         │
-                    │ • Diagnostics push (60s interval)     │
+                    │                                        │
+                    │ • Diagnostics push (60s interval)      │
                     │ • Real-time commands                   │
                     │ • Status updates                       │
                     │ • Health monitoring                    │
-                    └─────────────────────────────────────────┘
+                    └────────────────────────────────────────┘
 ```
 
 ---

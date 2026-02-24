@@ -1,3 +1,18 @@
+## [0.1.35] - 2026-02-24
+
+### Summary
+
+refactor(docs): configuration management system
+
+### Docs
+
+- docs: update README
+
+### Other
+
+- update project.functions.toon
+
+
 ## [0.1.34] - 2026-02-24
 
 ### Summary
