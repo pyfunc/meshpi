@@ -1,3 +1,19 @@
+## [0.1.10] - 2026-02-24
+
+### Summary
+
+refactor(build): deep code analysis engine with 6 supporting modules
+
+### Docs
+
+- docs: update TODO.md
+
+### Other
+
+- build: update Makefile
+- update TICKET
+
+
 ## [0.1.9] - 2026-02-24
 
 ### Summary
