@@ -1,3 +1,14 @@
+## [0.1.9] - 2026-02-24
+
+### Summary
+
+refactor(build): core module improvements
+
+### Other
+
+- build: update Makefile
+
+
 ## [0.1.8] - 2026-02-24
 
 ### Summary

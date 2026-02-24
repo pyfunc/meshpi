@@ -198,7 +198,7 @@ publish: build-dist
 		echo "Error: PYPI_TOKEN environment variable not set"; \
 		exit 1; \
 	fi
-	$(PYTHON) -m twine upload dist/* --username __token__ --password $$PYPI_TOKEN
+	$(PYTHON) -m twine upload dist/*
 	@echo "→ Published $(PROJECT_NAME) $(VERSION) to PyPI"
 
 publish-test: build-dist
