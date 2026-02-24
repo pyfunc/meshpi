@@ -1,7 +1,10 @@
 project: meshpi
-generated: "2026-02-24T12:46:34.094071"
-modules[1561]{path,lang,items}:
+generated: "2026-02-24T14:13:52.083915"
+modules[1571]{path,lang,items}:
   fake_applier.py,python,0
+  tests/test_monitoring.py,python,13
+  tests/test_e2e.py,python,18
+  tests/test_doctor.py,python,10
   tests/test_integration.py,python,25
   tests/test_meshpi.py,python,23
   scripts/show-repair-status.py,python,10
@@ -21,6 +24,7 @@ modules[1561]{path,lang,items}:
   meshpi/llm_agent.py,python,6
   meshpi/systemd.py,python,8
   meshpi/ssh_manager.py,python,23
+  meshpi/audit.py,python,11
   test-env/bin/dotenv,python,0
   test-env/bin/httpx,python,0
   test-env/bin/fastapi,python,0
@@ -1555,15 +1559,68 @@ modules[1561]{path,lang,items}:
   test-env/lib/python3.13/site-packages/cryptography/hazmat/backends/openssl/__init__.py,python,0
   test-env/lib/python3.13/site-packages/cryptography/hazmat/backends/openssl/backend.py,python,32
   meshpi/dashboard/__init__.py,python,1
+  meshpi/image/__init__.py,python,11
   meshpi/hardware/applier.py,python,6
   meshpi/hardware/custom.py,python,9
   meshpi/hardware/__init__.py,python,0
   meshpi/hardware/profiles.py,python,4
+  meshpi/metrics/__init__.py,python,17
+  meshpi/ota/__init__.py,python,15
+  meshpi/api/monitoring.py,python,16
+  meshpi/api/__init__.py,python,0
+  meshpi/alerts/__init__.py,python,14
   docker/test-rpi/test-utils.py,python,6
   docker/test-rpi/test-installation.py,python,12
   docker/test-rpi/aggregate-results.py,python,8
 
 function_details:
+  tests/test_monitoring.py:
+    functions[13]{name,kind,sig,loc,async,lines,cc,does}:
+      TestAuditLog.test_audit_log_write_and_read,method,(tmp_path),13-28,false,16,1,Test writing and reading audit entries.
+      TestAuditLog.test_audit_log_filter_by_action,method,(tmp_path),30-40,false,11,1,Test filtering by action type.
+      TestAuditLog.test_audit_log_get_failures,method,(tmp_path),42-52,false,11,1,Test getting failed operations.
+      TestAuditLog.test_audit_log_stats,method,(tmp_path),54-66,false,13,1,Test getting audit statistics.
+      TestMetricsHistory.test_metrics_history_record_and_read,method,(tmp_path),73-92,false,20,1,Test recording and reading metrics.
+      TestMetricsHistory.test_metrics_history_prune,method,(tmp_path),94-106,false,13,2,Test pruning old metrics.
+      TestAlertEngine.test_alert_rule_high_temperature,method,(),113-131,false,19,1,Test high temperature alert rule.
+      TestAlertEngine.test_alert_engine_status,method,(),133-141,false,9,1,Test getting alert engine status.
+      TestAlertEngine.test_alert_enable_disable_rule,method,(),143-157,false,15,5,Test enabling and disabling rules.
+      TestOtaManager.test_ota_job_creation,method,(),164-177,false,14,1,Test creating OTA job.
+      TestOtaManager.test_ota_manager_init,method,(tmp_path),179-186,false,8,1,Test OtaManager initialization.
+      TestOtaManager.test_ota_status_enum,method,(),188-196,false,9,1,Test OtaStatus enum values.
+      TestOtaManager.test_ota_device_status,method,(),198-211,false,14,1,Test OtaDeviceStatus dataclass.
+  tests/test_e2e.py:
+    functions[18]{name,kind,sig,loc,async,lines,cc,does}:
+      e2e_enabled,function,() -> bool,23-26,false,4,1,Check if E2E tests should run.
+      docker_available,function,() -> bool,29-35,false,7,3,Check if Docker is available and running.
+      docker_compose,function,(),45-87,false,43,6,Start Docker Compose for E2E tests.
+      api_client,function,(),91-93,false,3,1,HTTP client for API requests.
+      TestHostHealth.test_health_endpoint,method,"(docker_compose, api_client)",99-104,false,6,1,Test /health endpoint returns OK.
+      TestHostHealth.test_info_endpoint,method,"(docker_compose, api_client)",106-112,false,7,1,Test /info endpoint returns host info.
+      TestDeviceRegistry.test_list_devices_empty,method,"(docker_compose, api_client)",118-123,false,6,1,Test listing devices when none registered.
+      TestMetricsEndpoint.test_metrics_endpoint,method,"(docker_compose, api_client)",129-134,false,6,1,Test /metrics returns Prometheus format.
+      TestAlertsAPI.test_alerts_status,method,"(docker_compose, api_client)",140-146,false,7,1,Test /api/alerts/status endpoint.
+      TestAlertsAPI.test_alerts_rules_list,method,"(docker_compose, api_client)",148-154,false,7,1,Test listing alert rules.
+      TestAlertsAPI.test_enable_disable_rule,method,"(docker_compose, api_client)",156-164,false,9,1,Test enabling and disabling alert rules.
+      TestAuditAPI.test_audit_log_empty,method,"(docker_compose, api_client)",170-176,false,7,1,Test audit log when empty.
+      TestAuditAPI.test_audit_stats,method,"(docker_compose, api_client)",178-185,false,8,1,Test audit statistics.
+      TestOtaAPI.test_list_ota_jobs,method,"(docker_compose, api_client)",191-196,false,6,1,Test listing OTA jobs.
+      TestOtaAPI.test_get_nonexistent_job,method,"(docker_compose, api_client)",198-201,false,4,1,Test getting non-existent OTA job.
+      TestWebSocketConnection.test_websocket_connect,method,(docker_compose),208-227,true,20,1,Test WebSocket connection and hello handshake.
+      TestWebSocketConnection.test_websocket_diagnostics,method,(docker_compose),230-261,true,32,1,Test sending diagnostics via WebSocket.
+      TestWebSocketConnection.test_websocket_ping_pong,method,(docker_compose),264-286,true,23,1,Test ping/pong over WebSocket.
+  tests/test_doctor.py:
+    functions[10]{name,kind,sig,loc,async,lines,cc,does}:
+      TestParseTarget.test_parse_target_with_user,method,(),12-17,false,6,1,Parse target with user specified.
+      TestParseTarget.test_parse_target_without_user,method,(),19-24,false,6,1,Parse target without user (default user).
+      TestParseTarget.test_parse_target_with_port,method,(),26-31,false,6,1,Parse target with custom port.
+      TestParseTarget.test_parse_target_hostname,method,(),33-38,false,6,1,Parse target with hostname.
+      TestParseTarget.test_parse_target_hostname_with_port,method,(),40-45,false,6,1,Parse target with hostname and custom port.
+      TestParseTarget.test_parse_target_just_hostname,method,(),47-52,false,6,1,Parse target with just hostname.
+      TestParseTarget.test_parse_target_just_hostname_with_port,method,(),54-59,false,6,1,Parse target with just hostname and port.
+      TestRemoteDoctor.test_remote_doctor_init,method,(),65-72,false,8,1,Test RemoteDoctor initialization.
+      TestRemoteDoctor.test_remote_doctor_custom_port,method,(),74-77,false,4,1,Test RemoteDoctor with custom port.
+      TestRemoteDoctor.test_remote_doctor_disconnect_without_connection,method,(),79-84,false,6,1,Test disconnect when not connected.
   tests/test_integration.py:
     functions[25]{name,kind,sig,loc,async,lines,cc,does}:
       _host_reachable,function,() -> bool,37-42,false,6,2,host reachable
@@ -1675,20 +1732,20 @@ function_details:
       _write_as_root,function,"(path:str, content:str) -> None",332-342,false,11,2,Write file content using tee via sudo (avoids needing to run whole process as ro...
   meshpi/host.py:
     functions[22]{name,kind,sig,loc,async,lines,cc,does}:
-      info,function,(),143-150,true,8,1,info
-      get_config,function,"(req:ConfigRequest)",154-162,true,9,3,retrieves config
-      health,function,(),166-167,true,2,1,health
-      dashboard,function,(),171-173,true,3,1,Real-time device management dashboard.
-      list_devices,function,(),179-191,true,13,2,list devices
-      get_diagnostics,function,"(device_id:str)",195-199,true,5,3,retrieves diagnostics
-      push_config_endpoint,function,"(device_id:str, req:ConfigUpdateRequest)",207-213,true,7,2,sends config endpoint
-      push_command_endpoint,function,"(device_id:str, req:CommandRequest)",226-232,true,7,2,sends command endpoint
-      set_note,function,"(device_id:str, req:NoteRequest)",240-242,true,3,1,updates note
-      remove_device,function,"(device_id:str)",246-248,true,3,1,deletes device
-      websocket_endpoint,function,"(ws:WebSocket, device_id:str)",254-295,true,42,11,websocket endpoint
-      _get_local_ip,function,() -> str,300-308,false,9,2,retrieves local ip
-      _advertise_mdns,function,"(port:int) -> Zeroconf",311-334,false,24,2,advertise mdns
-      run_host,function,"(port:int=DEFAULT_PORT, bind:str='0.0.0.0', with_agent:bool=False) -> None",339-375,false,37,4,starts host
+      info,function,(),147-154,true,8,1,info
+      get_config,function,"(req:ConfigRequest)",158-166,true,9,3,retrieves config
+      health,function,(),170-171,true,2,1,health
+      dashboard,function,(),175-177,true,3,1,Real-time device management dashboard.
+      list_devices,function,(),183-195,true,13,2,list devices
+      get_diagnostics,function,"(device_id:str)",199-203,true,5,3,retrieves diagnostics
+      push_config_endpoint,function,"(device_id:str, req:ConfigUpdateRequest)",211-217,true,7,2,sends config endpoint
+      push_command_endpoint,function,"(device_id:str, req:CommandRequest)",230-236,true,7,2,sends command endpoint
+      set_note,function,"(device_id:str, req:NoteRequest)",244-246,true,3,1,updates note
+      remove_device,function,"(device_id:str)",250-252,true,3,1,deletes device
+      websocket_endpoint,function,"(ws:WebSocket, device_id:str)",258-299,true,42,11,websocket endpoint
+      _get_local_ip,function,() -> str,304-312,false,9,2,retrieves local ip
+      _advertise_mdns,function,"(port:int) -> Zeroconf",315-338,false,24,2,advertise mdns
+      run_host,function,"(port:int=DEFAULT_PORT, bind:str='0.0.0.0', with_agent:bool=False) -> None",343-379,false,37,4,starts host
       WebSocketManager.__init__,method,(),71-72,false,2,1,creates
       WebSocketManager.connect,method,"(device_id:str, ws:WebSocket) -> None",74-78,true,5,1,registers
       WebSocketManager.disconnect,method,"(device_id:str) -> None",80-83,true,4,1,disconnect
@@ -1906,6 +1963,19 @@ function_details:
       SSHManager.list_devices_table,method,() -> None,344-366,false,23,4,Display all devices in a table.
       SSHManager.save_device_list,method,"(filepath:str) -> None",368-381,false,14,2,Save device list to JSON file.
       SSHManager.load_device_list,method,"(filepath:str) -> None",383-405,false,23,4,Load device list from JSON file.
+  meshpi/audit.py:
+    functions[11]{name,kind,sig,loc,async,lines,cc,does}:
+      AuditEntry.to_json,method,() -> str,89-91,false,3,1,Convert entry to JSON string.
+      AuditLog.__init__,method,"(log_path:Path=None)",107-109,false,3,2,creates
+      AuditLog._ensure_log_file,method,() -> None,111-115,false,5,2,Ensure log file and directory exist.
+      AuditLog.write,method,"(device_id:str, action:Any, user:str='host', success:bool=True, detail:dict[str,Any]=None, ip_address:str=None, session_id:str=None) -> None",117-157,false,41,3,Write an audit log entry.
+      AuditLog.read,method,"(device_id:str=None, action:str=None, user:str=None, success:bool=None, hours:int=None, limit:int=100) -> list[AuditEntry]",159-219,false,61,17,Read audit log entries with optional filtering.
+      AuditLog.get_recent,method,"(count:int=50) -> list[AuditEntry]",221-223,false,3,1,Get most recent audit entries.
+      AuditLog.get_device_history,method,"(device_id:str, hours:int=24) -> list[AuditEntry]",225-227,false,3,1,Get audit history for a specific device.
+      AuditLog.get_failures,method,"(hours:int=24) -> list[AuditEntry]",229-231,false,3,1,Get failed operations in the specified time period.
+      AuditLog.export_csv,method,"(output_path:str, hours:int=None) -> int",233-272,false,40,5,Export audit log to CSV file.
+      AuditLog.get_stats,method,"(hours:int=24) -> dict",274-310,false,37,9,Get audit statistics for the specified time period.
+      AuditLog.prune,method,"(days:int=30) -> int",312-350,false,39,7,Remove audit entries older than specified days.
   test-env/lib/python3.13/site-packages/typing_extensions.py:
     functions[27]{name,kind,sig,loc,async,lines,cc,does}:
       IntVar,function,(name),352-353,false,2,1,int var
@@ -19724,6 +19794,19 @@ function_details:
   meshpi/dashboard/__init__.py:
     functions[1]{name,kind,sig,loc,async,lines,cc,does}:
       get_dashboard_html,function,() -> str,348-349,false,2,1,retrieves dashboard html
+  meshpi/image/__init__.py:
+    functions[11]{name,kind,sig,loc,async,lines,cc,does}:
+      build_image,function,"(host_ip:str, output_path:str, host_port:int=7422, wifi_ssid:str=None, wifi_password:str=None, hostname:str=None, base_image:str=None) -> bool",360-389,false,30,1,Convenience function to build a MeshPi image.
+      ImageBuilder.__init__,method,"(cache_dir:Path=None)",109-111,false,3,2,creates
+      ImageBuilder.build,method,"(host_ip:str, output_path:str, host_port:int=7422, wifi_ssid:str=None, wifi_password:str=None, hostname:str=None, base_image:str=None) -> bool",113-210,false,98,9,Build a custom image with MeshPi pre-installed.
+      ImageBuilder._create_config_package,method,"(host_ip:str, host_port:int, wifi_ssid:str, wifi_password:str, hostname:str, output_path:str) -> bool",212-286,false,75,3,Create a configuration package that can be applied to a running RPi.
+      ImageBuilder._check_tools,method,() -> bool,288-294,false,7,3,Check if required tools are available.
+      ImageBuilder._mount_image,method,"(image_path:Path) -> Optional[tuple]",296-300,false,5,1,Mount image partitions.
+      ImageBuilder._unmount_image,method,"(boot_mount:Path, root_mount:Path) -> None",302-304,false,3,1,Unmount image partitions.
+      ImageBuilder._configure_wifi,method,"(boot_mount:Path, ssid:str, password:str) -> None",306-319,false,14,1,Configure WiFi in boot partition.
+      ImageBuilder._set_hostname,method,"(root_mount:Path, hostname:str) -> None",321-329,false,9,1,Set device hostname.
+      ImageBuilder._inject_firstboot,method,"(root_mount:Path, host_ip:str, host_port:int) -> None",331-352,false,22,2,Inject firstboot service into image.
+      ImageBuilder._get_console,method,(),354-357,false,4,1,Get rich console.
   meshpi/hardware/applier.py:
     functions[6]{name,kind,sig,loc,async,lines,cc,does}:
       _config_txt_path,function,() -> Path,23-24,false,2,2,config txt path
@@ -19749,6 +19832,76 @@ function_details:
       get_profile,function,"(profile_id:str) -> HardwareProfile",686-689,false,4,2,retrieves profile
       list_profiles,function,"(category:Optional[str]=None, tag:Optional[str]=None) -> list[HardwareProfile]",692-698,false,7,7,list profiles
       categories,function,"() -> list[str]",701-702,false,2,2,categories
+  meshpi/metrics/__init__.py:
+    functions[17]{name,kind,sig,loc,async,lines,cc,does}:
+      _init_metrics,function,(),32-136,false,105,3,Initialize Prometheus metrics.
+      is_available,function,() -> bool,139-141,false,3,1,Check if Prometheus client is available.
+      update_device_metrics,function,"(device_id:str, diag:dict) -> None",144-186,false,43,11,Update Prometheus metrics from device diagnostics.
+      set_device_offline,function,"(device_id:str) -> None",189-195,false,7,2,Mark device as offline in metrics.
+      increment_ota_counter,function,"(device_id:str, status:str) -> None",198-204,false,7,2,Increment OTA update counter.
+      increment_config_counter,function,"(device_id:str, status:str) -> None",207-213,false,7,2,Increment config push counter.
+      increment_command_counter,function,"(device_id:str, status:str) -> None",216-222,false,7,2,Increment command execution counter.
+      increment_alert_counter,function,"(device_id:str, alert_type:str) -> None",225-234,false,10,2,Increment alert counter.
+      update_fleet_metrics,function,"(total:int, online:int, groups:int) -> None",237-245,false,9,2,Update fleet overview metrics.
+      get_metrics,function,() -> bytes,248-259,false,12,2,Get Prometheus metrics output.
+      get_content_type,function,() -> str,262-266,false,5,2,Get Prometheus content type.
+      get_metrics_history,function,() -> MetricsHistory,396-401,false,6,2,Get or create global metrics history instance.
+      MetricsHistory.__init__,method,"(db_path:str=None)",277-282,false,6,2,creates
+      MetricsHistory._init_db,method,() -> None,284-304,false,21,1,Initialize metrics database.
+      MetricsHistory.record,method,"(device_id:str, diag:dict) -> None",306-331,false,26,6,Record device metrics to database.
+      MetricsHistory.get_history,method,"(device_id:str, hours:int=24, limit:int=1000) -> list",333-367,false,35,1,Get historical metrics for a device.
+      MetricsHistory.prune,method,"(days:int=30) -> int",369-389,false,21,1,Remove old metrics data.
+  meshpi/ota/__init__.py:
+    functions[15]{name,kind,sig,loc,async,lines,cc,does}:
+      get_inactive_partition,function,() -> str,347-374,false,28,4,Get the inactive partition for OTA updates.
+      apply_ota_update,function,"(image_path:str, target_partition:str) -> bool",377-402,false,26,2,Apply OTA update to target partition.
+      set_boot_partition,function,"(partition:str) -> bool",405-425,false,21,2,Set boot partition for next reboot.
+      get_ota_manager,function,() -> OtaManager,432-437,false,6,2,Get or create global OTA manager instance.
+      OtaManager.__init__,method,"(ws_manager=None, audit_log=None, storage_path:Path=None)",94-101,false,8,2,creates
+      OtaManager.push_update,method,"(job:OtaJob) -> None",103-155,true,53,6,Push OTA update to devices with staged rollout.
+      OtaManager._push_to_device,method,"(device_id:str, job:OtaJob) -> None",157-171,true,15,2,Push update to a single device.
+      OtaManager.rollback,method,"(device_id:str) -> None",173-191,true,19,4,Rollback device to previous partition.
+      OtaManager.rollback_all,method,"(job_id:str) -> None",193-203,true,11,4,Rollback all devices in a job.
+      OtaManager.get_job_status,method,"(job_id:str) -> Optional[OtaJob]",205-207,false,3,1,Get status of an OTA job.
+      OtaManager.get_device_status,method,"(device_id:str) -> Optional[OtaDeviceStatus]",209-211,false,3,1,Get OTA status for a device.
+      OtaManager.update_device_status,method,"(device_id:str, status:OtaStatus, progress:float=None, error:str=None) -> None",213-242,false,30,9,Update device OTA status (called from WebSocket handler).
+      OtaManager._get_checksum,method,"(url:str) -> str",244-258,true,15,3,Get SHA256 checksum for image URL.
+      OtaManager.save_state,method,() -> None,260-299,false,40,3,Save OTA state to disk.
+      OtaManager.load_state,method,() -> None,301-344,false,44,5,Load OTA state from disk.
+  meshpi/api/monitoring.py:
+    functions[16]{name,kind,sig,loc,async,lines,cc,does}:
+      prometheus_metrics,function,(),26-37,true,12,1,Prometheus metrics endpoint.
+      get_audit_log,function,"(device_id:Optional[str]=None, action:Optional[str]=None, hours:int=Query(24, ge=1, le=168), limit:int=Query(100, ge=1, le=1000))",52-95,true,44,2,Get audit log entries.
+      get_audit_stats,function,"(hours:int=Query(24, ge=1, le=168))",99-103,true,5,1,Get audit statistics.
+      get_audit_failures,function,"(hours:int=Query(24, ge=1, le=168))",107-125,true,19,2,Get failed operations.
+      get_alerts_status,function,(),130-135,true,6,1,Get alert engine status.
+      get_alert_rules,function,(),139-155,true,17,2,Get all alert rules.
+      enable_alert_rule,function,"(name:str)",159-166,true,8,1,Enable an alert rule.
+      disable_alert_rule,function,"(name:str)",170-177,true,8,1,Disable an alert rule.
+      add_alert_webhook,function,"(url:str)",181-188,true,8,1,Add a webhook URL.
+      remove_alert_webhook,function,"(url:str)",192-199,true,8,1,Remove a webhook URL.
+      push_ota_update,function,"(job:OtaJobCreate)",214-243,true,30,1,Push OTA update to devices.
+      list_ota_jobs,function,(),247-268,true,22,2,List all OTA jobs.
+      get_ota_job,function,"(job_id:str)",272-293,true,22,2,Get OTA job status.
+      rollback_ota_job,function,"(job_id:str)",297-309,true,13,1,Rollback all devices in an OTA job.
+      get_device_ota_status,function,"(device_id:str)",313-335,true,23,2,Get OTA status for a specific device.
+      get_metrics_history,function,"(device_id:str, hours:int=Query(24, ge=1, le=168), limit:int=Query(500, ge=1, le=2000))",340-365,true,26,2,Get historical metrics for a device.
+  meshpi/alerts/__init__.py:
+    functions[14]{name,kind,sig,loc,async,lines,cc,does}:
+      load_alerts_config,function,"(config_path:Path=None) -> AlertConfig",345-375,false,31,4,Load alerts configuration from YAML file.
+      create_default_config,function,"(config_path:Path=None) -> None",378-408,false,31,2,Create default alerts configuration file.
+      get_alert_engine,function,() -> AlertEngine,415-420,false,6,2,Get or create global alert engine instance.
+      AlertEngine.__init__,method,"(webhooks:list[str]=None, rules:list[AlertRule]=None, config_path:Path=None)",130-142,false,13,4,creates
+      AlertEngine._load_config,method,() -> None,144-167,false,24,9,Load alert configuration from YAML file.
+      AlertEngine._parse_rule,method,"(rule_def:dict) -> AlertRule | None",169-205,false,37,5,Parse rule definition from config.
+      AlertEngine.add_webhook,method,"(url:str) -> None",207-210,false,4,2,Add a webhook URL.
+      AlertEngine.remove_webhook,method,"(url:str) -> None",212-215,false,4,2,Remove a webhook URL.
+      AlertEngine.enable_rule,method,"(name:str) -> None",217-222,false,6,3,Enable a specific rule.
+      AlertEngine.disable_rule,method,"(name:str) -> None",224-229,false,6,3,Disable a specific rule.
+      AlertEngine.evaluate,method,"(device_id:str, diag:dict) -> list[str]",231-274,true,44,6,Evaluate all rules against device diagnostics.
+      AlertEngine._format_message,method,"(template:str, diag:dict) -> str",276-295,false,20,3,Format message template with diagnostic values.
+      AlertEngine._send_webhooks,method,"(message:str, device_id:str, alert_type:str, severity:str) -> None",297-332,true,36,6,Send alert to all configured webhooks.
+      AlertEngine.get_status,method,() -> dict,334-342,false,9,5,Get alert engine status.
   docker/test-rpi/test-utils.py:
     functions[6]{name,kind,sig,loc,async,lines,cc,does}:
       get_system_info,function,() -> Dict,18-66,false,49,12,Collect comprehensive system information

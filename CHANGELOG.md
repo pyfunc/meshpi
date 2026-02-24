@@ -1,3 +1,24 @@
+## [0.1.32] - 2026-02-24
+
+### Summary
+
+feat(docs): configuration management system
+
+### Docs
+
+- docs: update README
+- docs: update STANDARD_DOCUMENTATION.md
+
+### Test
+
+- update tests/test_e2e.py
+
+### Other
+
+- update deploy/grafana/provisioning/dashboards/json/meshpi-overview.json
+- update project.functions.toon
+
+
 ## [0.1.31] - 2026-02-24
 
 ### Summary

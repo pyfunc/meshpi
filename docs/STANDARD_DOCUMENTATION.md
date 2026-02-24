@@ -244,6 +244,27 @@ meshpi group exec weather_stations "meshpi diag"
 meshpi group exec weather_stations "meshpi hw list"
 ```
 
+### 📋 **Krok 6: Skonfiguruj monitoring**
+
+```bash
+# Uruchom stack monitoringowy
+docker compose --profile monitoring up
+
+# Sprawdź audit log
+meshpi audit
+
+# Sprawdź status alertów
+meshpi alerts status
+
+# Monitoruj metryki
+curl http://localhost:7422/metrics
+
+# Dostęp do dashboardów
+open http://localhost:7422/metrics    # Prometheus metrics
+open http://localhost:9090            # Prometheus UI
+open http://localhost:3000            # Grafana (admin/meshpi)
+```
+
 ---
 
 ## 🎯 **Przykłady Konfiguracji**

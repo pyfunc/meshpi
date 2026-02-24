@@ -215,6 +215,39 @@ meshpi diag
 ```
 Collects CPU load, memory, temperature, GPIO states, I2C scan, USB devices, WiFi signal, services, logs, and more.
 
+### 📈 Monitoring & Observability
+
+MeshPi includes built-in monitoring with Prometheus metrics, alerting, and audit logging:
+
+```bash
+# View audit log
+meshpi audit
+
+# Check alert status
+meshpi alerts status
+
+# Push OTA update
+meshpi ota push --image ./image.img --devices rpi-001,rpi-002
+```
+
+**Features:**
+- 🔍 **Audit Logging** - All fleet operations logged to JSONL
+- 📊 **Prometheus Metrics** - CPU, memory, temperature, device count
+- 🚨 **Alert Engine** - 9 default rules (temperature, memory, offline, etc.)
+- 🔄 **OTA Updates** - Staged rollout with A/B partition rollback
+- 📉 **Grafana Dashboards** - Pre-built visualization templates
+
+**Docker Monitoring Stack:**
+```bash
+# Start with Prometheus + Grafana
+docker compose --profile monitoring up
+
+# Access endpoints
+open http://localhost:7422/metrics    # Prometheus metrics
+open http://localhost:9090            # Prometheus UI
+open http://localhost:3000            # Grafana (admin/meshpi)
+```
+
 ### 💾 USB Offline Workflow
 For air-gapped environments:
 ```bash
