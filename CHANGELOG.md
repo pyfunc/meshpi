@@ -1,3 +1,16 @@
+## [0.1.33] - 2026-02-24
+
+### Summary
+
+docs(docs): deep code analysis engine
+
+### Docs
+
+- docs: update STANDARDS_TABLE.md
+- docs: update STANDARD_DOCUMENTATION.md
+- docs: update README
+
+
 ## [0.1.32] - 2026-02-24
 
 ### Summary

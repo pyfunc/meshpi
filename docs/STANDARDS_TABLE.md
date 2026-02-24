@@ -123,6 +123,17 @@ meshpi group hw-apply office_sensors bme280_weather_station oled_ssd1306_status_
 meshpi group exec office_sensors "meshpi diag"
 ```
 
+### 📋 **Krok 6: Monitoring**
+```bash
+# Uruchom monitoring
+docker compose --profile monitoring up
+
+# Sprawdź logi i alerty
+meshpi audit
+meshpi alerts status
+curl http://localhost:7422/metrics
+```
+
 ---
 
 ## 🎯 **Standardowe Scenariusze**
@@ -175,6 +186,34 @@ meshpi group hw-apply [group] --interactive
 meshpi group exec [group] "meshpi diag"
 ```
 
+### 📈 **Monitoring i obserwowalność:**
+```bash
+# Audit logging
+meshpi audit
+meshpi audit --device rpi-001
+meshpi audit --export audit_$(date +%Y%m%d).jsonl
+
+# Alert engine
+meshpi alerts status
+meshpi alerts list
+meshpi alerts test temperature-high
+meshpi alerts silence temperature-high --duration 1h
+
+# Metryki
+curl http://localhost:7422/metrics
+
+# OTA updates
+meshpi ota push --image ./image.img --devices rpi-001,rpi-002
+meshpi ota status
+meshpi ota rollback --device rpi-001
+
+# Docker monitoring stack
+docker compose --profile monitoring up
+open http://localhost:7422/metrics    # Prometheus metrics
+open http://localhost:9090            # Prometheus UI
+open http://localhost:3000            # Grafana (admin/meshpi)
+```
+
 ---
 
 ## ✅ **Standardowe Dobrze Praktyki**
@@ -194,7 +233,15 @@ meshpi group exec [group] "meshpi diag"
 2. **Testowanie:** Przetestuj na pojedynczym urządzeniu
 3. **Instalacja:** Zastosuj na całej grupie
 4. **Weryfikacja:** Sprawdź status i działanie
-5. **Monitoring:** Ustaw regularne sprawdzanie
+5. **Monitoring:** Ustaw regularne sprawdzanie, alerty i metryki
+6. **Audyt:** Przeglądaj logi operacji i zdarzeń
+
+### 📈 **Konfiguracja monitoringu:**
+- **Prometheus:** Zbieraj metryki systemowe i aplikacyjne
+- **Grafana:** Twórz dashboardy dla wizualizacji
+- **Alerting:** Skonfiguruj reguły alertów dla kluczowych metryk
+- **Audit logging:** Włącz logowanie wszystkich operacji
+- **OTA updates:** Przygotuj proces aktualizacji firmware
 
 ---
 
@@ -203,6 +250,7 @@ meshpi group exec [group] "meshpi diag"
 - **GRUPY URZĄDZEŃ** = Logiczne zbiory Raspberry Pi
 - **PROFILE SPRZĘTOWE** = Kompletna konfiguracja OS + drivers
 - **INSTALACJA** = Aplikacja profili na grupach urządzeń
+- **MONITORING** = Prometheus + Grafana + Alerting + Audit
 - **DOKUMENTACJA** = Spójne, powtarzalne procedury
 
-Ten standard zapewnia spójność, powtarzalność i łatwość zarządzania dużymi wdrożeniami MeshPi.
+Ten standard zapewnia spójność, powtarzalność i łatwość zarządzania dużymi wdrożeniami MeshPi z pełną obserwowalnością.

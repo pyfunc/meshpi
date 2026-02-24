@@ -203,6 +203,57 @@ For complete standardized documentation on device groups and hardware profiles, 
 
 ---
 
+## 📈 **Monitoring Profili**
+
+### 🔍 **Audit Logging**
+
+```bash
+# Sprawdź logi instalacji profili
+meshpi audit --operation hw-apply
+
+# Filtruj po konkretnym profilu
+meshpi audit --filter profile=bme280_weather_station
+
+# Eksportuj logi
+meshpi audit --export profile_installation_$(date +%Y%m%d).jsonl
+```
+
+### 📊 **Metryki Prometheus**
+
+```bash
+# Sprawdź metryki zainstalowanych profili
+curl http://localhost:7422/metrics | grep meshpi_hardware_profiles
+
+# Kluczowe metryki profili:
+# - meshpi_hardware_profiles_installed_total - liczba zainstalowanych profili
+# - meshpi_hardware_profiles_by_category - profile według kategorii
+# - meshpi_hardware_profiles_install_duration - czas instalacji
+# - meshpi_hardware_profiles_install_success - sukcesy/porażki
+```
+
+### 🚨 **Alerting**
+
+```bash
+# Sprawdź alerty związane z profilami
+meshpi alerts list --category hardware
+
+# Testuj alert instalacji
+meshpi alerts test profile-install-failed
+
+# Wycisz alert
+meshpi alerts silence profile-install-failed --duration 2h
+```
+
+### 📉 **Grafana Dashboards**
+
+Pre-built dashboardy dla monitoringu profili:
+- **Hardware Profiles Overview** - status wszystkich profili
+- **Profile Installation Metrics** - czasy instalacji, sukcesy
+- **Profile Categories** - rozkład profili według kategorii
+- **Device Profile Mapping** - które urządzenia mają które profile
+
+---
+
 ## 🚀 **Szybki Start**
 
 ### 1️⃣ **Wybierz profil:**
@@ -233,6 +284,22 @@ meshpi hw apply bme280_weather_station
 
 # Lub zdalnie przez SSH
 meshpi ssh hw-apply bme280_weather_station --target pi@192.168.1.100
+```
+
+### 4️⃣ **Skonfiguruj monitoring:**
+
+```bash
+# Uruchom stack monitoringowy
+docker compose --profile monitoring up
+
+# Sprawdź metryki profilu
+curl http://localhost:7422/metrics | grep meshpi_hardware_profiles
+
+# Sprawdź logi instalacji
+meshpi audit --operation hw-apply
+
+# Monitoruj status urządzeń
+meshpi alerts status
 ```
 
 ---

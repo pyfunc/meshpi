@@ -267,6 +267,95 @@ open http://localhost:3000            # Grafana (admin/meshpi)
 
 ---
 
+## 📈 **Monitoring i Obserwowalność**
+
+MeshPi zawiera wbudowany system monitoringu z metrykami Prometheus, alertowaniem i logowaniem audytu.
+
+### 🔍 **Audit Logging**
+
+```bash
+# Przeglądaj logi audytu
+meshpi audit
+
+# Filtruj logi po urządzeniu
+meshpi audit --device rpi-001
+
+# Filtruj po operacji
+meshpi audit --operation hw-apply
+
+# Eksportuj logi
+meshpi audit --export audit_$(date +%Y%m%d).jsonl
+```
+
+### 🚨 **Alert Engine**
+
+```bash
+# Sprawdź status alertów
+meshpi alerts status
+
+# Lista reguł alertów
+meshpi alerts list
+
+# Testuj alert
+meshpi alerts test temperature-high
+
+# Wycisz alert
+meshpi alerts silence temperature-high --duration 1h
+```
+
+### 📊 **Metryki Prometheus**
+
+```bash
+# Pobierz metryki
+curl http://localhost:7422/metrics
+
+# Kluczowe metryki:
+# - meshpi_devices_total - liczba urządzeń
+# - meshpi_device_online - status urządzeń (0/1)
+# - meshpi_cpu_usage - użycie CPU
+# - meshpi_memory_usage - użycie pamięci
+# - meshpi_temperature_celsius - temperatura
+# - meshpi_hardware_profiles_installed - zainstalowane profile
+```
+
+### 🔄 **OTA Updates**
+
+```bash
+# Wypchnij aktualizację
+meshpi ota push --image ./image.img --devices rpi-001,rpi-002
+
+# Sprawdź status aktualizacji
+meshpi ota status
+
+# Przywróć poprzednią wersję
+meshpi ota rollback --device rpi-001
+```
+
+### 🐳 **Docker Monitoring Stack**
+
+```bash
+# Uruchom z monitoringiem
+docker compose --profile monitoring up
+
+# Dostęp do usług
+open http://localhost:7422/metrics    # Prometheus metrics
+open http://localhost:9090            # Prometheus UI
+open http://localhost:3000            # Grafana (admin/meshpi)
+
+# Tylko monitoring
+docker compose --profile monitoring up prometheus grafana
+```
+
+### 📉 **Grafana Dashboards**
+
+Pre-built dashboardy dla:
+- **MeshPi Overview** - status floty, metryki systemowe
+- **Device Details** - szczegóły pojedynczego urządzenia
+- **Hardware Profiles** - status zainstalowanych profili
+- **Alert History** - historia alertów i zdarzeń
+
+---
+
 ## 🎯 **Przykłady Konfiguracji**
 
 ### 🏢 **Scenariusz: Biuro - Monitoring Środowiskowy**
