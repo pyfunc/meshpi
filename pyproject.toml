@@ -4,13 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "meshpi"
-version = "0.1.4"
+version = "0.1.5"
 description = "Zero-touch Raspberry Pi mesh configuration tool"
 readme = "README.md"
 requires-python = ">=3.9"
 license = "Apache-2.0"
 authors = [
-    { name = "Softreck", email = "info@softreck.dev" },
     { name = "Tom Sapletta", email = "tom@sapletta.com" },
 ]
 keywords = ["raspberry-pi", "mesh", "configuration", "iot", "automation"]
