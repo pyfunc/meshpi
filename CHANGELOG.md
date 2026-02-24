@@ -1,3 +1,18 @@
+## [0.1.8] - 2026-02-24
+
+### Summary
+
+feat(examples): code relationship mapping with 2 supporting modules
+
+### Config
+
+- config: update goal.yaml
+
+### Other
+
+- update .env.example
+
+
 ## [0.1.7] - 2026-02-24
 
 ### Summary
