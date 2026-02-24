@@ -160,7 +160,7 @@ pip3 install meshpi==0.1.14
 - Apply hardware profiles on-the-fly
 - Trigger reboots with delay
 
-### 🔧 49+ Hardware Profiles
+### 🔧 49+ Hardware Profiles with Group Management
 
 | Category | Examples |
 |----------|----------|
@@ -173,9 +173,28 @@ pip3 install meshpi==0.1.14
 | 🎩 HATs | Sense HAT, PiSugar UPS, RTC DS3231 |
 
 ```bash
-# Apply multiple profiles in one command
-meshpi hw apply oled_ssd1306_i2c sensor_bme280 gpio_stepper_arm69ak
+# Quick interactive installation
+meshpi hw quick-install --interactive
+
+# Browse hardware catalog
+meshpi hw catalog --category sensor --popular
+
+# Apply to device groups
+meshpi group create sensors
+meshpi group add-device sensors pi@192.168.1.100
+meshpi group hw-apply sensors sensor_bme280 sensor_ds18b20
+
+# Remote management via SSH
+meshpi ssh hw-apply --target pi@192.168.1.100 hat_sense
+meshpi ssh hw-search oled --category display
 ```
+
+**New Features:**
+- 🎯 **Quick Install Wizard** - Interactive hardware selection and installation
+- 📋 **Hardware Catalog** - Browse and filter 49+ profiles with tags
+- 👥 **Device Groups** - Batch operations on multiple devices
+- 🔗 **SSH Remote Management** - Control hardware on remote devices
+- 🎨 **Custom Profiles** - Create and share your own hardware configurations
 
 ### 🤖 LLM-Powered Agent
 ```bash
@@ -260,6 +279,35 @@ meshpi host                          → RSA key exchange
 | `meshpi agent` | Launch LLM management agent |
 | `meshpi info` | Show local keys/config state |
 | `meshpi pendrive *` | USB offline workflow |
+
+---
+
+## 📁 Repository Organization
+
+```
+meshpi/
+├── test/                    # Test scripts and utilities
+│   ├── batch-rpi-test.sh    # Batch testing for multiple RPis
+│   ├── test-doctor.sh       # Doctor functionality tests
+│   ├── test-enhanced-cli.sh # CLI feature tests
+│   ├── test-list.sh         # List functionality tests
+│   ├── test-restart.sh      # Restart functionality tests
+│   ├── test-ssh-host.sh     # SSH host tests
+│   ├── test-ssh-scan-identify.sh # SSH scan tests
+│   └── run-rpi-tests.sh     # Main Docker test runner
+├── scripts/                 # Tooling and utility scripts
+│   ├── diagnose-rpi.sh      # Comprehensive RPi diagnostics
+│   ├── fix-rpi-meshpi.sh    # Automated common issue fixes
+│   ├── monitor-repair.py    # Real-time repair status monitor (Python)
+│   ├── project.py           # Code analysis tool (Python)
+│   ├── remote-rpi-test.sh   # Remote RPi testing via SSH
+│   ├── rpi-service-manager.sh # Service management
+│   └── show-repair-status.py # Visual repair status display (Python)
+├── meshpi/                  # Core Python package
+├── docker/                  # Docker configurations
+├── docs/                    # Documentation
+└── tests/                   # Unit tests
+```
 
 ---
 

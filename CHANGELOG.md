@@ -1,3 +1,130 @@
+## [0.1.24] - 2026-02-24
+
+### Summary
+
+docs(docs): CLI interface with 3 supporting modules
+
+### Docs
+
+- docs: update README
+- docs: update TODO.md
+
+
+## [0.1.25] - 2026-02-24
+
+### Summary
+
+feat(hardware): advanced hardware management with groups and SSH remote control
+
+### Features
+
+- **Hardware Catalog**: New `meshpi hw catalog` command with advanced filtering
+  - Filter by category, tags, popularity
+  - Multiple output formats (table, JSON, list)
+  - Categorized browsing with examples
+
+- **Quick Install Wizard**: Interactive hardware installation with `meshpi hw quick-install`
+  - Category-based selection interface
+  - Support for device groups and remote targets
+  - Popular hardware filtering
+  - Multi-profile selection with confirmation
+
+- **Device Groups**: Complete group management system
+  - `meshpi group create` - Create device groups
+  - `meshpi group add-device` - Add devices to groups
+  - `meshpi group list/show` - Browse groups
+  - `meshpi group exec` - Execute commands on groups
+  - `meshpi group hw-apply` - Install hardware on groups
+
+- **SSH Remote Hardware Management**: Full remote control capabilities
+  - `meshpi ssh hw-search` - Search profiles on remote devices
+  - `meshpi ssh hw-apply` - Install profiles remotely
+  - `meshpi ssh hw-create` - Create custom profiles remotely
+  - `meshpi ssh hw-custom` - List custom profiles remotely
+  - `meshpi ssh hw-list` - Browse hardware on remote devices
+
+- **Enhanced Hardware Profiles**: Extended profile system
+  - Custom profile creation wizard
+  - Import/export from YAML/JSON
+  - Profile management with delete functionality
+  - Integration with SSH and group systems
+
+### Commands Added
+
+```bash
+# Hardware Management
+meshpi hw catalog [--category] [--tag] [--popular] [--format]
+meshpi hw quick-install [--target] [--group] [--interactive]
+
+# Device Groups  
+meshpi group create <name>
+meshpi group add-device <group> <target>
+meshpi group list
+meshpi group show <group>
+meshpi group exec <group> <command>
+meshpi group hw-apply <group> [profiles...]
+
+# SSH Remote Hardware
+meshpi ssh hw-search [query] [--category] [--tag]
+meshpi ssh hw-apply [profiles...] [--target] [--interactive]
+meshpi ssh hw-create [--target] [--interactive]
+meshpi ssh hw-custom [--target]
+meshpi ssh hw-list [--category] [--tag]
+```
+
+### Docs
+
+- **HARDWARE-GROUP-MANAGEMENT.md**: Comprehensive guide for hardware and group management
+- **SSH-HARDWARE-MANAGEMENT.md**: Complete SSH remote control documentation
+- **README.md**: Updated with new hardware management features
+- Updated examples and usage patterns throughout documentation
+
+### Breaking Changes
+
+- Enhanced `meshpi hw list` with better filtering (backward compatible)
+- Extended hardware profile system with custom profiles (backward compatible)
+
+### Other
+
+- Improved error handling for group operations
+- Better progress reporting for batch installations
+- Enhanced SSH connection management
+- Optimized parallel execution for device groups
+
+## [0.1.24] - 2026-02-24
+
+### Summary
+
+refactor(repo): repository organization and script migration
+
+### Refactor
+
+- **Repository Structure**: Reorganized scripts into dedicated directories
+  - `test/` - All test-related scripts moved from root
+  - `scripts/` - Tooling and utility scripts moved from root
+- **Script Migration**: Moved 8 test scripts and 7 tooling scripts
+- **Python Conversion**: Converted shell scripts to Python for better maintainability
+  - `project.sh` → `scripts/project.py` (code analysis tool)
+  - `monitor-repair.sh` → `scripts/monitor-repair.py` (real-time status monitoring)
+  - `show-repair-status.sh` → `scripts/show-repair-status.py` (visual status display)
+
+### Docs
+
+- **README.md**: Added repository organization section with complete file structure
+- **RPI-TESTING-README.md**: Updated all script references to new locations
+- **CHANGELOG.md**: Updated script path references
+
+### Test
+
+- Updated all script references in documentation
+- Made Python scripts executable
+- Verified script functionality after migration
+
+### Other
+
+- **Breaking Change**: Script paths have changed - update documentation and workflows
+- **Improved Maintainability**: Python scripts offer better error handling and extensibility
+
 ## [0.1.23] - 2026-02-24
 
 ### Summary
