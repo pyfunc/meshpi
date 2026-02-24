@@ -1,3 +1,14 @@
+## [0.1.19] - 2026-02-24
+
+### Summary
+
+feat(goal): CLI interface improvements
+
+### Other
+
+- update meshpi/cli.py
+
+
 ## [0.1.18] - 2026-02-24
 
 ### Summary

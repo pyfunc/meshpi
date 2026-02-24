@@ -21,6 +21,15 @@ Commands:
   meshpi pendrive seed       Seed USB with client key (CLIENT)
   meshpi pendrive apply      Apply config from USB (CLIENT)
   meshpi info                Show local key/config state
+  meshpi ssh scan            Scan network for SSH devices
+  meshpi ssh add <target>    Add SSH device to management
+  meshpi ssh list            List managed SSH devices
+  meshpi ssh connect         Connect to SSH device(s)
+  meshpi ssh exec <cmd>      Execute command on SSH device(s)
+  meshpi ssh install         Install MeshPi on SSH device(s)
+  meshpi ssh update          Update MeshPi on SSH device(s)
+  meshpi ssh restart         Restart MeshPi service on SSH device(s)
+  meshpi ssh transfer        Transfer files to/from SSH device(s)
 
 Doctor Examples:
   meshpi doctor pi@192.168.1.100      # Diagnose and auto-repair
@@ -36,6 +45,13 @@ List Examples:
   meshpi ls                         # Interactive device list
   meshpi list                        # Interactive device list
   meshpi ls --scan                   # Scan and list devices
+
+SSH Management Examples:
+  meshpi ssh scan --add              # Scan and add devices
+  meshpi ssh add pi@192.168.1.100    # Add specific device
+  meshpi ssh connect --all           # Connect to all devices
+  meshpi ssh exec "uptime"           # Run command on all devices
+  meshpi ssh install --target pi@rpi # Install MeshPi on specific device
 """
 
 from __future__ import annotations
