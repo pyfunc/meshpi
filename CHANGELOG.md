@@ -2,6 +2,26 @@
 
 ### Summary
 
+refactor(tests): configuration management system
+
+### Test
+
+- update tests/test_configuration_e2e.py
+- update tests/test_edge_cases_errors.py
+- update tests/test_hardware_profiles_e2e.py
+- update tests/test_pendrive_e2e.py
+- update tests/test_performance_stress.py
+- update tests/test_ssh_management_e2e.py
+
+### Other
+
+- update meshpi/hardware/applier.py
+
+
+## [0.1.23] - 2026-02-24
+
+### Summary
+
 fix(config): CLI interface improvements
 
 ### Docs
