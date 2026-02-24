@@ -70,7 +70,7 @@ class DeviceRegistry:
                 rec.last_seen = time.time()
                 rec.online = True
             else:
-                rec = DeviceRecord(device_id=device_id, address=address)
+                rec = DeviceRecord(device_id=device_id, address=address, online=True)
                 self._devices[device_id] = rec
             self._save()
             return rec

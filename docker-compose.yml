@@ -1,0 +1,71 @@
+version: "3.8"
+
+services:
+  # MeshPi Host Service
+  meshpi-host:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: meshpi-host
+    command: >
+      sh -c "echo -e 'HOSTNAME=meshpi-host-test\nWIFI_SSID=testnet\nWIFI_PASSWORD=testpass123' > /root/.meshpi/config.env && meshpi host --bind 0.0.0.0 --port 7422"
+    ports:
+      - "7422:7422"
+    networks:
+      meshpi-net:
+        ipv4_address: 172.28.0.10
+    environment:
+      - MESHPI_HOST=0.0.0.0
+      - MESHPI_PORT=7422
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7422/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # MeshPi Client Service
+  meshpi-client:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: meshpi-client
+    command: >
+      sh -c "sleep 5 && meshpi scan --host meshpi-host --port 7422 --dry-run"
+    depends_on:
+      meshpi-host:
+        condition: service_healthy
+    networks:
+      meshpi-net:
+        ipv4_address: 172.28.0.20
+    environment:
+      - MESHPI_HOST=meshpi-host
+      - MESHPI_PORT=7422
+
+  # Test runner
+  test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: meshpi-test
+    command: >
+      sh -c "pip install pytest && pytest /app/tests -v"
+    volumes:
+      - ./tests:/app/tests:ro
+    depends_on:
+      meshpi-host:
+        condition: service_healthy
+    networks:
+      meshpi-net:
+        ipv4_address: 172.28.0.30
+    environment:
+      - MESHPI_TEST_HOST=meshpi-host
+      - MESHPI_TEST_PORT=7422
+
+networks:
+  meshpi-net:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.28.0.0/16

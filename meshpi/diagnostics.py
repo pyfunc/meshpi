@@ -178,7 +178,11 @@ def _network_info() -> dict:
 
 
 def _ping_check(host: str) -> bool:
-    r = subprocess.run(["ping", "-c", "1", "-W", "2", host], capture_output=True)
+    import shutil
+    ping_bin = shutil.which("ping")
+    if not ping_bin:
+        return False
+    r = subprocess.run([ping_bin, "-c", "1", "-W", "2", host], capture_output=True)
     return r.returncode == 0
 
 

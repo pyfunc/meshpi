@@ -69,19 +69,37 @@ def cmd_config(update: bool):
 @click.option("--bind", default="0.0.0.0", show_default=True)
 @click.option("--agent", is_flag=True, default=False,
               help="Also launch the LLM agent REPL in a background thread")
-def cmd_host(port: int, bind: str, agent: bool):
+@click.option("--install", is_flag=True, default=False,
+              help="Install as systemd service (meshpi-host.service) and exit")
+@click.option("--uninstall", is_flag=True, default=False,
+              help="Remove meshpi-host.service")
+@click.option("--status", is_flag=True, default=False,
+              help="Show systemd service status")
+def cmd_host(port: int, bind: str, agent: bool, install: bool, uninstall: bool, status: bool):
     """
     \b
     HOST: Start the MeshPi host service.
 
     Exposes:
-      - REST API for encrypted config delivery
-      - WebSocket endpoint for real-time device management
+      - REST API + Swagger at /docs
+      - Real-time dashboard at /dashboard
+      - WebSocket endpoint /ws/{device_id}
       - mDNS advertisement (_meshpi._tcp)
-      - Swagger UI at /docs
 
-    Add --agent to simultaneously run the NLP management REPL.
+    Use --install to auto-start at boot via systemd.
     """
+    if install:
+        from .systemd import install_host_service
+        install_host_service(port=port, with_agent=agent)
+        return
+    if uninstall:
+        from .systemd import uninstall_service
+        uninstall_service("meshpi-host")
+        return
+    if status:
+        from .systemd import service_status
+        service_status("meshpi-host")
+        return
     from .host import run_host
     run_host(port=port, bind=bind, with_agent=agent)
 
@@ -118,7 +136,13 @@ def cmd_scan(manual_host, port, dry_run):
 @main.command("daemon")
 @click.option("--host", "manual_host", default=None)
 @click.option("--port", default=7422, show_default=True)
-def cmd_daemon(manual_host, port):
+@click.option("--install", is_flag=True, default=False,
+              help="Install as systemd service (meshpi-daemon.service) and exit")
+@click.option("--uninstall", is_flag=True, default=False,
+              help="Remove meshpi-daemon.service")
+@click.option("--status", is_flag=True, default=False,
+              help="Show systemd service status")
+def cmd_daemon(manual_host, port, install, uninstall, status):
     """
     \b
     CLIENT: Run persistent WebSocket daemon.
@@ -129,9 +153,21 @@ def cmd_daemon(manual_host, port):
       - Real-time config updates from host
       - Remote command execution (run_command / apply_profile / reboot)
 
-    Install as a systemd service for automatic startup:
-      sudo meshpi daemon --install
+    Use --install to auto-start at boot via systemd:
+      meshpi daemon --install
     """
+    if install:
+        from .systemd import install_daemon_service
+        install_daemon_service(host=manual_host, port=port)
+        return
+    if uninstall:
+        from .systemd import uninstall_service
+        uninstall_service("meshpi-daemon")
+        return
+    if status:
+        from .systemd import service_status
+        service_status("meshpi-daemon")
+        return
     from .client import run_daemon
     run_daemon(manual_host=manual_host, port=port)
 

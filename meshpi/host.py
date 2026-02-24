@@ -43,7 +43,7 @@ from typing import Optional
 import uvicorn
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 from rich.console import Console
 from zeroconf import ServiceInfo, Zeroconf
@@ -56,6 +56,7 @@ from .crypto import (
     public_key_to_pem,
 )
 from .registry import registry
+from .dashboard import get_dashboard_html
 
 console = Console()
 log = logging.getLogger("meshpi.host")
@@ -164,6 +165,12 @@ async def get_config(req: ConfigRequest):
 @app.get("/health")
 async def health():
     return {"status": "ok", "online_clients": len(ws_manager.online_ids)}
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard():
+    """Real-time device management dashboard."""
+    return HTMLResponse(content=get_dashboard_html())
 
 
 # ---- Device management REST ------------------------------------------------
@@ -335,9 +342,10 @@ def run_host(port: int = DEFAULT_PORT, bind: str = "0.0.0.0", with_agent: bool =
 
     local_ip = _get_local_ip()
     console.print(f"\n[bold cyan]MeshPi Host v0.2[/bold cyan]")
-    console.print(f"  API:      http://{local_ip}:{port}/docs")
-    console.print(f"  Devices:  http://{local_ip}:{port}/devices")
-    console.print(f"  WS:       ws://{local_ip}:{port}/ws/{{device_id}}")
+    console.print(f"  API:       http://{local_ip}:{port}/docs")
+    console.print(f"  Dashboard: http://{local_ip}:{port}/dashboard")
+    console.print(f"  Devices:   http://{local_ip}:{port}/devices")
+    console.print(f"  WS:        ws://{local_ip}:{port}/ws/{{device_id}}")
     console.print("[dim]Ctrl+C to stop[/dim]\n")
 
     zc = _advertise_mdns(port)

@@ -1,3 +1,32 @@
+## [0.1.4] - 2026-02-24
+
+### Summary
+
+feat(docs): CLI interface improvements
+
+### Docs
+
+- docs: update README
+
+### Test
+
+- update tests/test_meshpi.py
+
+### Build
+
+- update pyproject.toml
+
+### Other
+
+- update meshpi/__init__.py
+- update meshpi/cli.py
+- update meshpi/dashboard/__init__.py
+- update meshpi/diagnostics.py
+- update meshpi/host.py
+- update meshpi/registry.py
+- update meshpi/systemd.py
+
+
 ## [0.1.3] - 2026-02-24
 
 ### Summary
