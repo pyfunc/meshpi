@@ -26,6 +26,7 @@ Commands:
   meshpi ssh add <target>    Add SSH device to management
   meshpi ssh list            List managed SSH devices
   meshpi ssh connect         Connect to SSH device(s)
+  meshpi ssh shell <target>  Open interactive SSH shell to device
   meshpi ssh exec <cmd>      Execute command on SSH device(s)
   meshpi ssh install         Install MeshPi on SSH device(s)
   meshpi ssh update          Update MeshPi on SSH device(s)
@@ -55,6 +56,7 @@ SSH Management Examples:
   meshpi ssh scan --add              # Scan and add devices
   meshpi ssh add pi@192.168.1.100    # Add specific device
   meshpi ssh connect --all           # Connect to all devices
+  meshpi ssh shell pi@192.168.1.100  # Open SSH shell to device
   meshpi ssh exec "uptime"           # Run command on all devices
   meshpi ssh install --target pi@rpi # Install MeshPi on specific device
 """
@@ -62,6 +64,7 @@ SSH Management Examples:
 from __future__ import annotations
 
 import time
+import subprocess
 import click
 from pathlib import Path
 from rich.console import Console
@@ -1192,6 +1195,449 @@ def cmd_ssh_restart(target: Optional[str], service: str):
             manager.disconnect_device(device)
 
 
+@cmd_ssh.command("shell")
+@click.argument("target")
+@click.option("--password", is_flag=True, default=False, help="Use password authentication")
+@click.option("--key", help="Path to SSH private key")
+def cmd_ssh_shell(target: str, password: bool, key: Optional[str]):
+    """Open interactive SSH shell to device."""
+    from .ssh_manager import parse_device_target
+    import getpass
+    
+    user, host, port = parse_device_target(target)
+    
+    console.print(Panel.fit(
+        f"[bold cyan]SSH Shell Access[/bold cyan]\n"
+        f"Connecting to [bold]{user}@{host}:{port}[/bold]\n"
+        f"[dim]Type 'exit' to return to MeshPi[/dim]",
+        border_style="cyan"
+    ))
+    
+    # Build SSH command
+    ssh_cmd = ["ssh"]
+    
+    if key:
+        ssh_cmd.extend(["-i", key])
+    elif not password:
+        # Try default key
+        default_key = Path.home() / ".ssh" / "id_rsa"
+        if default_key.exists():
+            ssh_cmd.extend(["-i", str(default_key)])
+    
+    ssh_cmd.extend(["-p", str(port), f"{user}@{host}"])
+    
+    try:
+        console.print(f"[cyan]→ Launching SSH shell...[/cyan]")
+        console.print("[dim]Use 'exit' to return to MeshPi[/dim]\n")
+        
+        # Launch SSH shell
+        subprocess.run(ssh_cmd, check=True)
+        
+        console.print("\n[green]✓ Returned from SSH shell[/green]")
+        
+    except subprocess.CalledProcessError as e:
+        console.print(f"[red]✗ SSH connection failed: {e}[/red]")
+        
+        if not password and Confirm.ask("Try with password authentication?", default=False):
+            try:
+                ssh_password = getpass.getpass(f"Enter SSH password for {user}@{host}: ")
+                
+                # Use sshpass if available
+                ssh_pass_cmd = ["sshpass", "-p", ssh_password] + ssh_cmd
+                
+                try:
+                    subprocess.run(ssh_pass_cmd, check=True)
+                    console.print("\n[green]✓ Returned from SSH shell[/green]")
+                except FileNotFoundError:
+                    console.print("[yellow]sshpass not available. Install with: sudo apt install sshpass[/yellow]")
+                    console.print(f"[dim]Manual command: ssh {user}@{host}[/dim]")
+                except subprocess.CalledProcessError:
+                    console.print("[red]✗ Password authentication failed[/red]")
+                    
+            except Exception as e:
+                console.print(f"[red]✗ Password authentication failed: {e}[/red]")
+    
+    except KeyboardInterrupt:
+        console.print("\n[yellow]SSH session interrupted[/yellow]")
+
+
+@cmd_ssh.command("system-update")
+@click.option("--target", help="Specific device (user@host:port)")
+@click.option("--parallel", is_flag=True, default=True, help="Run in parallel")
+def cmd_ssh_system_update(target: Optional[str], parallel: bool):
+    """Update package lists on SSH device(s)."""
+    from .ssh_manager import SSHManager, parse_device_target
+    from pathlib import Path
+    
+    manager = SSHManager()
+    devices_file = Path.home() / ".meshpi" / "ssh_devices.json"
+    
+    if devices_file.exists():
+        manager.load_device_list(str(devices_file))
+    
+    # Filter devices if target specified
+    if target:
+        user, host, port = parse_device_target(target)
+        manager.devices = [d for d in manager.devices if d.host == host and d.user == user and d.port == port]
+    
+    if not manager.devices:
+        console.print("[red]No devices available[/red]")
+        return
+    
+    # Connect to all devices
+    console.print("[cyan]→[/cyan] Connecting to devices...")
+    for device in manager.devices:
+        manager.connect_to_device(device)
+    
+    # Execute system update
+    console.print(f"[cyan]→[/cyan] Updating package lists on devices...")
+    results = manager.run_command_on_all("sudo apt update", parallel=parallel)
+    
+    # Display results
+    table = Table(title="System Update Results", border_style="cyan")
+    table.add_column("Device", style="bold")
+    table.add_column("Exit Code", style="dim")
+    table.add_column("Output")
+    table.add_column("Error", style="red")
+    
+    for device, (exit_code, stdout, stderr) in results.items():
+        exit_status = "[green]0[/green]" if exit_code == 0 else f"[red]{exit_code}[/red]"
+        output = stdout[:150] + "..." if len(stdout) > 150 else stdout
+        error = stderr[:100] + "..." if len(stderr) > 100 else stderr
+        
+        table.add_row(str(device), exit_status, output, error)
+    
+    console.print(table)
+    
+    # Disconnect
+    for device in manager.devices:
+        manager.disconnect_device(device)
+
+
+@cmd_ssh.command("system-upgrade")
+@click.option("--target", help="Specific device (user@host:port)")
+@click.option("--parallel", is_flag=True, default=True, help="Run in parallel")
+@click.option("--safe", is_flag=True, default=False, help="Safe upgrade (avoid removing packages)")
+def cmd_ssh_system_upgrade(target: Optional[str], parallel: bool, safe: bool):
+    """Upgrade packages on SSH device(s)."""
+    from .ssh_manager import SSHManager, parse_device_target
+    from pathlib import Path
+    
+    manager = SSHManager()
+    devices_file = Path.home() / ".meshpi" / "ssh_devices.json"
+    
+    if devices_file.exists():
+        manager.load_device_list(str(devices_file))
+    
+    # Filter devices if target specified
+    if target:
+        user, host, port = parse_device_target(target)
+        manager.devices = [d for d in manager.devices if d.host == host and d.user == user and d.port == port]
+    
+    if not manager.devices:
+        console.print("[red]No devices available[/red]")
+        return
+    
+    # Confirm operation
+    if not Confirm.ask(f"[yellow]This will upgrade packages on {len(manager.devices)} device(s). Continue?[/yellow]", default=False):
+        console.print("[dim]Operation cancelled.[/dim]")
+        return
+    
+    # Connect to all devices
+    console.print("[cyan]→[/cyan] Connecting to devices...")
+    for device in manager.devices:
+        manager.connect_to_device(device)
+    
+    # Execute system upgrade
+    upgrade_cmd = "sudo apt upgrade -y" if not safe else "sudo apt safe-upgrade -y"
+    console.print(f"[cyan]→[/cyan] Upgrading packages on devices...")
+    console.print(f"[dim]Command: {upgrade_cmd}[/dim]")
+    
+    results = manager.run_command_on_all(upgrade_cmd, parallel=parallel)
+    
+    # Display results
+    table = Table(title="System Upgrade Results", border_style="cyan")
+    table.add_column("Device", style="bold")
+    table.add_column("Exit Code", style="dim")
+    table.add_column("Output")
+    table.add_column("Error", style="red")
+    
+    for device, (exit_code, stdout, stderr) in results.items():
+        exit_status = "[green]0[/green]" if exit_code == 0 else f"[red]{exit_code}[/red]"
+        output = stdout[:150] + "..." if len(stdout) > 150 else stdout
+        error = stderr[:100] + "..." if len(stderr) > 100 else stderr
+        
+        table.add_row(str(device), exit_status, output, error)
+    
+    console.print(table)
+    
+    # Disconnect
+    for device in manager.devices:
+        manager.disconnect_device(device)
+
+
+@cmd_ssh.command("batch")
+@click.argument("command")
+@click.option("--target", help="Specific device (user@host:port)")
+@click.option("--parallel", is_flag=True, default=True, help="Run in parallel")
+@click.option("--dry-run", is_flag=True, default=False, help="Show command without executing")
+@click.option("--timeout", default=30, help="Command timeout in seconds")
+def cmd_ssh_batch(command: str, target: Optional[str], parallel: bool, dry_run: bool, timeout: int):
+    """Execute custom command on multiple SSH devices."""
+    from .ssh_manager import SSHManager, parse_device_target
+    from pathlib import Path
+    
+    manager = SSHManager()
+    devices_file = Path.home() / ".meshpi" / "ssh_devices.json"
+    
+    if devices_file.exists():
+        manager.load_device_list(str(devices_file))
+    
+    # Filter devices if target specified
+    if target:
+        user, host, port = parse_device_target(target)
+        manager.devices = [d for d in manager.devices if d.host == host and d.user == user and d.port == port]
+    
+    if not manager.devices:
+        console.print("[red]No devices available[/red]")
+        return
+    
+    # Show command and devices
+    console.print(f"[bold cyan]Batch Command Execution[/bold cyan]")
+    console.print(f"[dim]Command: {command}[/dim]")
+    console.print(f"[dim]Devices: {len(manager.devices)}[/dim]")
+    console.print(f"[dim]Parallel: {parallel}[/dim]")
+    
+    if dry_run:
+        console.print("\n[yellow]DRY RUN - Command will be executed on:[/yellow]")
+        for device in manager.devices:
+            console.print(f"  • {device}")
+        return
+    
+    # Confirm operation
+    if not Confirm.ask(f"[yellow]Execute command on {len(manager.devices)} device(s)?[/yellow]", default=False):
+        console.print("[dim]Operation cancelled.[/dim]")
+        return
+    
+    # Connect to all devices
+    console.print("[cyan]→[/cyan] Connecting to devices...")
+    for device in manager.devices:
+        manager.connect_to_device(device)
+    
+    # Execute command
+    console.print(f"[cyan]→[/cyan] Executing command...")
+    results = manager.run_command_on_all(command, parallel=parallel)
+    
+    # Display results
+    table = Table(title="Batch Command Results", border_style="cyan")
+    table.add_column("Device", style="bold")
+    table.add_column("Exit Code", style="dim")
+    table.add_column("Output")
+    table.add_column("Error", style="red")
+    
+    success_count = 0
+    for device, (exit_code, stdout, stderr) in results.items():
+        exit_status = "[green]0[/green]" if exit_code == 0 else f"[red]{exit_code}[/red]"
+        output = stdout[:200] + "..." if len(stdout) > 200 else stdout
+        error = stderr[:100] + "..." if len(stderr) > 100 else stderr
+        
+        table.add_row(str(device), exit_status, output, error)
+        if exit_code == 0:
+            success_count += 1
+    
+    console.print(table)
+    console.print(f"\n[green]Success: {success_count}/{len(manager.devices)} devices[/green]")
+    
+    # Disconnect
+    for device in manager.devices:
+        manager.disconnect_device(device)
+
+
+@main.group("group")
+def cmd_group():
+    """Group operations for managing multiple devices."""
+    pass
+
+
+@cmd_group.command("create")
+@click.argument("group_name")
+@click.option("--description", help="Group description")
+def cmd_group_create(group_name: str, description: Optional[str]):
+    """Create a new device group."""
+    from .ssh_manager import SSHManager
+    from pathlib import Path
+    import json
+    
+    groups_file = Path.home() / ".meshpi" / "groups.json"
+    
+    # Load existing groups
+    groups = {}
+    if groups_file.exists():
+        groups = json.loads(groups_file.read_text())
+    
+    if group_name in groups:
+        console.print(f"[red]Group '{group_name}' already exists[/red]")
+        return
+    
+    # Create group
+    groups[group_name] = {
+        "name": group_name,
+        "description": description or "",
+        "devices": [],
+        "created_at": time.time()
+    }
+    
+    # Save groups
+    groups_file.write_text(json.dumps(groups, indent=2))
+    console.print(f"[green]✓ Group '{group_name}' created[/green]")
+
+
+@cmd_group.command("list")
+def cmd_group_list():
+    """List all device groups."""
+    from pathlib import Path
+    import json
+    
+    groups_file = Path.home() / ".meshpi" / "groups.json"
+    
+    if not groups_file.exists():
+        console.print("[yellow]No groups found[/yellow]")
+        return
+    
+    groups = json.loads(groups_file.read_text())
+    
+    if not groups:
+        console.print("[yellow]No groups found[/yellow]")
+        return
+    
+    table = Table(title="Device Groups", border_style="cyan")
+    table.add_column("Group Name", style="bold")
+    table.add_column("Description", style="dim")
+    table.add_column("Devices", style="dim")
+    table.add_column("Created", style="dim")
+    
+    for group_name, group_data in groups.items():
+        device_count = len(group_data.get("devices", []))
+        created = time.strftime("%Y-%m-%d", time.localtime(group_data.get("created_at", 0)))
+        description = group_data.get("description", "—")
+        
+        table.add_row(group_name, description, str(device_count), created)
+    
+    console.print(table)
+
+
+@cmd_group.command("add-device")
+@click.argument("group_name")
+@click.argument("target")
+def cmd_group_add_device(group_name: str, target: str):
+    """Add device to a group."""
+    from .ssh_manager import parse_device_target
+    from pathlib import Path
+    import json
+    
+    groups_file = Path.home() / ".meshpi" / "groups.json"
+    
+    if not groups_file.exists():
+        console.print("[red]No groups found[/red]")
+        return
+    
+    groups = json.loads(groups_file.read_text())
+    
+    if group_name not in groups:
+        console.print(f"[red]Group '{group_name}' not found[/red]")
+        return
+    
+    # Parse target
+    user, host, port = parse_device_target(target)
+    device_str = f"{user}@{host}:{port}"
+    
+    # Add device to group
+    if device_str not in groups[group_name]["devices"]:
+        groups[group_name]["devices"].append(device_str)
+        groups_file.write_text(json.dumps(groups, indent=2))
+        console.print(f"[green]✓ Added {device_str} to group '{group_name}'[/green]")
+    else:
+        console.print(f"[yellow]Device already in group[/yellow]")
+
+
+@cmd_group.command("exec")
+@click.argument("group_name")
+@click.argument("command")
+@click.option("--parallel", is_flag=True, default=True, help="Run in parallel")
+def cmd_group_exec(group_name: str, command: str, parallel: bool):
+    """Execute command on all devices in a group."""
+    from .ssh_manager import SSHManager
+    from pathlib import Path
+    import json
+    
+    groups_file = Path.home() / ".meshpi" / "groups.json"
+    
+    if not groups_file.exists():
+        console.print("[red]No groups found[/red]")
+        return
+    
+    groups = json.loads(groups_file.read_text())
+    
+    if group_name not in groups:
+        console.print(f"[red]Group '{group_name}' not found[/red]")
+        return
+    
+    devices = groups[group_name]["devices"]
+    if not devices:
+        console.print(f"[yellow]No devices in group '{group_name}'[/yellow]")
+        return
+    
+    # Create SSH manager and add devices
+    manager = SSHManager()
+    for device_str in devices:
+        user, host, port = parse_device_target(device_str)
+        from .ssh_manager import SSHDevice
+        device = SSHDevice(host, user, port)
+        manager.add_device(device)
+    
+    # Confirm operation
+    console.print(f"[bold cyan]Group Command Execution[/bold cyan]")
+    console.print(f"[dim]Group: {group_name}[/dim]")
+    console.print(f"[dim]Command: {command}[/dim]")
+    console.print(f"[dim]Devices: {len(devices)}[/dim]")
+    
+    if not Confirm.ask(f"[yellow]Execute command on {len(devices)} device(s)?[/yellow]", default=False):
+        console.print("[dim]Operation cancelled.[/dim]")
+        return
+    
+    # Connect and execute
+    console.print("[cyan]→[/cyan] Connecting to devices...")
+    for device in manager.devices:
+        manager.connect_to_device(device)
+    
+    console.print(f"[cyan]→[/cyan] Executing command...")
+    results = manager.run_command_on_all(command, parallel=parallel)
+    
+    # Display results
+    table = Table(title=f"Group '{group_name}' Results", border_style="cyan")
+    table.add_column("Device", style="bold")
+    table.add_column("Exit Code", style="dim")
+    table.add_column("Output")
+    table.add_column("Error", style="red")
+    
+    success_count = 0
+    for device, (exit_code, stdout, stderr) in results.items():
+        exit_status = "[green]0[/green]" if exit_code == 0 else f"[red]{exit_code}[/red]"
+        output = stdout[:200] + "..." if len(stdout) > 200 else stdout
+        error = stderr[:100] + "..." if len(stderr) > 100 else stderr
+        
+        table.add_row(str(device), exit_status, output, error)
+        if exit_code == 0:
+            success_count += 1
+    
+    console.print(table)
+    console.print(f"\n[green]Success: {success_count}/{len(devices)} devices[/green]")
+    
+    # Disconnect
+    for device in manager.devices:
+        manager.disconnect_device(device)
+
+
 @cmd_ssh.command("transfer")
 @click.argument("local_path")
 @click.argument("remote_path")
@@ -1236,7 +1682,11 @@ def cmd_ssh_transfer(local_path: str, remote_path: str, target: Optional[str], d
 
 
 def auto_detect_rpi_devices() -> list[DeviceRecord]:
-    """Auto-detect Raspberry Pi devices on local network."""
+    """Auto-detect Raspberry Pi devices on local network.
+    
+    Filters out common network infrastructure (.1, .254 gateways) and uses
+    strict RPI detection to avoid false positives with routers and other ARM devices.
+    """
     from .ssh_manager import SSHManager
     from .registry import DeviceRecord
     import socket
@@ -1266,6 +1716,22 @@ def auto_detect_rpi_devices() -> list[DeviceRecord]:
     # Use SSH manager to scan for SSH devices
     ssh_manager = SSHManager()
     ssh_devices = ssh_manager.scan_network(network, user="pi", port=22, timeout=3)
+    
+    # Filter out obvious network infrastructure devices
+    filtered_devices = []
+    for device in ssh_devices:
+        # Skip common router/gateway IP addresses and network infrastructure
+        host_parts = device.host.split('.')
+        if len(host_parts) == 4:
+            last_octet = int(host_parts[3])
+            # Skip common gateway addresses and network devices
+            if last_octet in [1, 254, 255, 0]:
+                console.print(f"[dim]Skipping network infrastructure: {device.host}[/dim]")
+                continue
+        
+        filtered_devices.append(device)
+    
+    ssh_devices = filtered_devices
     
     if not ssh_devices:
         return discovered
@@ -1312,10 +1778,20 @@ def auto_detect_rpi_devices() -> list[DeviceRecord]:
                     ssh_manager.disconnect_device(ssh_device)
                     
             except Exception as e:
-                # Could not connect with SSH key, try password
+                # Could not connect with SSH key, try password only for likely RPI devices
+                # Skip password attempts for obvious network infrastructure
+                host_parts = ssh_device.host.split('.')
+                if len(host_parts) == 4:
+                    last_octet = int(host_parts[3])
+                    if last_octet in [1, 254, 255, 0]:
+                        console.print(f"[dim]Skipping network device: {ssh_device.host}[/dim]")
+                        continue
+                
+                # For other devices, try password but with a clear message that it's optional
                 try:
                     import getpass
-                    password = getpass.getpass(f"Enter password for {ssh_device.user}@{ssh_device.host} (or press Enter to skip): ")
+                    console.print(f"[yellow]Authentication failed for {ssh_device.user}@{ssh_device.host}[/yellow]")
+                    password = getpass.getpass(f"Enter SSH password for {ssh_device.user}@{ssh_device.host} (or press Enter to skip): ")
                     if password:
                         if ssh_manager.connect_to_device(ssh_device, password=password):
                             # Check if it's a Raspberry Pi
@@ -1354,18 +1830,32 @@ def auto_detect_rpi_devices() -> list[DeviceRecord]:
 
 
 def check_if_raspberry_pi(ssh_device) -> tuple[bool, str]:
-    """Check if the connected device is a Raspberry Pi."""
+    """Check if the connected device is a Raspberry Pi using strict detection.
+    
+    Uses multiple indicators to avoid false positives with routers and other ARM devices:
+    - Primary: Raspberry Pi model string, BCM hardware, or hostname + boot config
+    - Secondary: Boot files, firmware directory, vcgencmd tool, RPI-specific issue files
+    - Architecture check alone is insufficient (many routers use ARM)
+    """
     try:
-        # Check for Raspberry Pi specific files
+        # Check for Raspberry Pi specific files and characteristics
         commands = [
             "cat /proc/device-tree/model 2>/dev/null || echo 'unknown'",
             "hostname 2>/dev/null || echo 'unknown'",
-            "uname -m 2>/dev/null || echo 'unknown'"
+            "uname -m 2>/dev/null || echo 'unknown'",
+            "cat /proc/cpuinfo 2>/dev/null | grep 'Hardware' | head -1 || echo 'unknown'",
+            "test -f /boot/config.txt && echo 'config_exists' || echo 'no_config'",
+            "test -d /boot/firmware && echo 'firmware_exists' || echo 'no_firmware'",
+            "which vcgencmd 2>/dev/null && echo 'vcgencmd_exists' || echo 'no_vcgencmd'"
         ]
         
         model = ""
         hostname = ""
         arch = ""
+        hardware = ""
+        boot_config = ""
+        firmware = ""
+        vcgencmd = ""
         
         for cmd in commands:
             stdin, stdout, stderr = ssh_device.client.exec_command(cmd)
@@ -1377,14 +1867,48 @@ def check_if_raspberry_pi(ssh_device) -> tuple[bool, str]:
                 hostname = result
             elif "uname" in cmd:
                 arch = result
+            elif "Hardware" in cmd:
+                hardware = result
+            elif "config" in cmd:
+                boot_config = result
+            elif "firmware" in cmd:
+                firmware = result
+            elif "vcgencmd" in cmd:
+                vcgencmd = result
         
-        # Check if it's a Raspberry Pi
+        # More strict Raspberry Pi detection
+        # Primary indicators: Raspberry Pi in model string or BCM hardware
         is_rpi = (
-            "raspberry pi" in model.lower() or 
-            "bcm" in model.lower() or
-            arch in ["armv7l", "aarch64", "armv6l"] or
-            "raspberrypi" in hostname.lower()
+            ("raspberry pi" in model.lower() and model.lower() != "unknown") or
+            ("bcm" in model.lower() and model.lower() != "unknown") or
+            ("bcm28" in hardware.lower() and hardware.lower() != "unknown") or
+            ("raspberrypi" in hostname.lower() and boot_config == "config_exists")
         )
+        
+        # Secondary indicators for confirmation (but not sufficient alone)
+        rpi_indicators = [
+            boot_config == "config_exists",
+            firmware == "firmware_exists", 
+            vcgencmd == "vcgencmd_exists",
+            arch in ["armv7l", "aarch64", "armv6l"]
+        ]
+        
+        # If we have some indicators but not primary ones, require more confirmation
+        if not is_rpi and sum(rpi_indicators) >= 2:
+            # Check for additional RPI-specific files
+            try:
+                stdin, stdout, stderr = ssh_device.client.exec_command("test -f /etc/rpi-issue && echo 'rpi_issue' || echo 'no_rpi_issue'")
+                rpi_issue = stdout.read().decode().strip()
+                
+                stdin, stdout, stderr = ssh_device.client.exec_command("test -f /boot/issue.txt && echo 'boot_issue' || echo 'no_boot_issue'")
+                boot_issue = stdout.read().decode().strip()
+                
+                # Only consider it RPI if we have multiple strong indicators
+                if (rpi_issue == "rpi_issue" or boot_issue == "boot_issue") and boot_config == "config_exists":
+                    is_rpi = True
+                    
+            except Exception:
+                pass
         
         return is_rpi, hostname
         
@@ -1664,13 +2188,16 @@ def device_menu(device):
         console.print("  [2] Restart service")
         console.print("  [3] Reboot device")
         console.print("  [4] View details")
-        console.print("  [5] Remove device")
+        console.print("  [5] Shell access")
+        console.print("  [6] System update")
+        console.print("  [7] Batch operations")
+        console.print("  [8] Remove device")
         console.print("  [b] Back to device list")
         console.print("  [q] Quit")
         
         choice = Prompt.ask(
             "\n[cyan]Choose an option[/cyan]",
-            choices=["1", "2", "3", "4", "5", "b", "q"],
+            choices=["1", "2", "3", "4", "5", "6", "7", "8", "b", "q"],
             default="b"
         )
         
@@ -1736,10 +2263,117 @@ def device_menu(device):
             Prompt.ask("\nPress Enter to continue...")
             
         elif choice == "5":
+            # Shell access
+            console.print(f"\n[yellow]→ Opening SSH shell to {device.device_id}...[/yellow]")
+            try:
+                # Parse address for SSH
+                if "@" in device.address:
+                    target = device.address
+                else:
+                    target = f"pi@{device.address}"
+                
+                # Open SSH shell
+                open_ssh_shell(target)
+            except Exception as e:
+                console.print(f"[red]✗ Shell access failed: {e}[/red]")
+            
+            # Continue without prompt since SSH shell will handle interaction
+            
+        elif choice == "6":
+            # System update
+            console.print(f"\n[yellow]→ Running system update on {device.device_id}...[/yellow]")
+            if Confirm.ask("Update package lists on this device?", default=True):
+                try:
+                    # Parse address for SSH
+                    if "@" in device.address:
+                        target = device.address
+                    else:
+                        target = f"pi@{device.address}"
+                    
+                    # Run system update
+                    from .cli import cmd_ssh_system_update
+                    cmd_ssh_system_update(target=target, parallel=False)
+                except Exception as e:
+                    console.print(f"[red]✗ System update failed: {e}[/red]")
+            
+            Prompt.ask("\nPress Enter to continue...")
+            
+        elif choice == "7":
+            # Batch operations
+            batch_operations_menu(device)
+            
+        elif choice == "8":
             # Remove device
             if Confirm.ask(f"Remove {device.device_id} from registry?", default=False):
                 console.print(f"[green]✓ Device {device.device_id} removed[/green]")
                 break
+
+
+def open_ssh_shell(target: str):
+    """Open interactive SSH shell to device."""
+    import os
+    import subprocess
+    import getpass
+    from .ssh_manager import parse_device_target
+    
+    user, host, port = parse_device_target(target)
+    
+    console.print(Panel.fit(
+        f"[bold cyan]SSH Shell Access[/bold cyan]\n"
+        f"Connecting to [bold]{user}@{host}:{port}[/bold]\n"
+        f"[dim]Type 'exit' to return to MeshPi[/dim]",
+        border_style="cyan"
+    ))
+    
+    # Try different SSH methods
+    ssh_cmd = None
+    
+    # Method 1: Try with default SSH key
+    default_key = Path.home() / ".ssh" / "id_rsa"
+    if default_key.exists():
+        ssh_cmd = ["ssh", "-i", str(default_key), "-p", str(port), f"{user}@{host}"]
+    else:
+        # Method 2: Try without key (will prompt for password if needed)
+        ssh_cmd = ["ssh", "-p", str(port), f"{user}@{host}"]
+    
+    try:
+        console.print(f"[cyan]→ Launching SSH shell...[/cyan]")
+        console.print("[dim]Use 'exit' to return to MeshPi[/dim]\n")
+        
+        # Launch SSH shell
+        subprocess.run(ssh_cmd, check=True)
+        
+        console.print("\n[green]✓ Returned from SSH shell[/green]")
+        
+    except subprocess.CalledProcessError as e:
+        console.print(f"[red]✗ SSH connection failed: {e}[/red]")
+        console.print("[dim]Check SSH credentials and network connectivity[/dim]")
+        
+        # Offer to try with password
+        if Confirm.ask("Try with password authentication?", default=False):
+            try:
+                password = getpass.getpass(f"Enter SSH password for {user}@{host}: ")
+                
+                # Use sshpass if available, otherwise fallback to manual
+                ssh_pass_cmd = ["sshpass", "-p", password] + ssh_cmd
+                
+                try:
+                    subprocess.run(ssh_pass_cmd, check=True)
+                    console.print("\n[green]✓ Returned from SSH shell[/green]")
+                except FileNotFoundError:
+                    console.print("[yellow]sshpass not available. Please install it or use manual SSH.[/yellow]")
+                    console.print(f"[dim]Manual command: ssh {user}@{host}[/dim]")
+                except subprocess.CalledProcessError:
+                    console.print("[red]✗ Password authentication failed[/red]")
+                    
+            except Exception as e:
+                console.print(f"[red]✗ Password authentication failed: {e}[/red]")
+    
+    except KeyboardInterrupt:
+        console.print("\n[yellow]SSH session interrupted[/yellow]")
+    
+    except Exception as e:
+        console.print(f"[red]✗ SSH shell failed: {e}[/red]")
 
 
 def show_device_details(device):
