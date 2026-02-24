@@ -1,0 +1,6 @@
+
+# meshpi hardware profile
+dtparam=i2c_arm=on
+
+# meshpi hardware profile
+dtoverlay=w1-gpio,gpiopin=4

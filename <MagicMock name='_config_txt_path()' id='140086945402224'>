@@ -1,0 +1,4 @@
+
+# meshpi hardware profile
+enable_uart=1
+dtoverlay=uart0

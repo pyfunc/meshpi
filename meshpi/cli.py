@@ -620,6 +620,284 @@ def _print_diag_rich(diag: dict) -> None:
             console.print(f"  [dim]{line}[/dim]")
 
 
+# meshpi group
+# ─────────────────────────────────────────────────────────────────────────────
+
+@main.group("group")
+def cmd_group():
+    """Device group management for batch operations."""
+    pass
+
+
+@cmd_group.command("create")
+@click.argument("group_name")
+@click.option("--description", default="", help="Group description")
+def cmd_group_create(group_name: str, description: str):
+    """Create a device group."""
+    from pathlib import Path
+    import json
+    
+    groups_file = Path.home() / ".meshpi" / "groups.json"
+    groups_file.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Load existing groups
+    groups = {}
+    if groups_file.exists():
+        try:
+            groups = json.loads(groups_file.read_text())
+        except:
+            groups = {}
+    
+    if group_name in groups:
+        console.print(f"[red]Group '{group_name}' already exists[/red]")
+        return
+    
+    groups[group_name] = {
+        "name": group_name,
+        "description": description,
+        "devices": [],
+        "created_at": time.time()
+    }
+    
+    groups_file.write_text(json.dumps(groups, indent=2))
+    console.print(f"[green]✓ Group '{group_name}' created[/green]")
+
+
+@cmd_group.command("add-device")
+@click.argument("group_name")
+@click.argument("target")
+def cmd_group_add_device(group_name: str, target: str):
+    """Add device to group."""
+    from pathlib import Path
+    import json
+    from .ssh_manager import parse_device_target
+    
+    groups_file = Path.home() / ".meshpi" / "groups.json"
+    if not groups_file.exists():
+        console.print("[red]No groups found. Create a group first.[/red]")
+        return
+    
+    try:
+        groups = json.loads(groups_file.read_text())
+    except:
+        console.print("[red]Error reading groups file[/red]")
+        return
+    
+    if group_name not in groups:
+        console.print(f"[red]Group '{group_name}' not found[/red]")
+        return
+    
+    user, host, port = parse_device_target(target)
+    device_info = f"{user}@{host}:{port}"
+    
+    if device_info in groups[group_name]["devices"]:
+        console.print("[yellow]Device already in group[/yellow]")
+        return
+    
+    groups[group_name]["devices"].append(device_info)
+    groups_file.write_text(json.dumps(groups, indent=2))
+    console.print(f"[green]✓ Added {device_info} to group '{group_name}'[/green]")
+
+
+@cmd_group.command("list")
+def cmd_group_list():
+    """List all device groups."""
+    from pathlib import Path
+    import json
+    
+    groups_file = Path.home() / ".meshpi" / "groups.json"
+    if not groups_file.exists():
+        console.print("[yellow]No groups found[/yellow]")
+        return
+    
+    try:
+        groups = json.loads(groups_file.read_text())
+    except:
+        console.print("[red]Error reading groups file[/red]")
+        return
+    
+    if not groups:
+        console.print("[yellow]No groups found[/yellow]")
+        return
+    
+    from rich.table import Table
+    table = Table(title="Device Groups", border_style="cyan")
+    table.add_column("Group", style="bold cyan")
+    table.add_column("Devices", style="dim")
+    table.add_column("Description", style="dim")
+    
+    for group_name, group_data in groups.items():
+        device_count = len(group_data.get("devices", []))
+        description = group_data.get("description", "")
+        table.add_row(group_name, str(device_count), description)
+    
+    console.print(table)
+
+
+@cmd_group.command("show")
+@click.argument("group_name")
+def cmd_group_show(group_name: str):
+    """Show devices in a group."""
+    from pathlib import Path
+    import json
+    
+    groups_file = Path.home() / ".meshpi" / "groups.json"
+    if not groups_file.exists():
+        console.print("[red]No groups found[/red]")
+        return
+    
+    try:
+        groups = json.loads(groups_file.read_text())
+    except:
+        console.print("[red]Error reading groups file[/red]")
+        return
+    
+    if group_name not in groups:
+        console.print(f"[red]Group '{group_name}' not found[/red]")
+        return
+    
+    group_data = groups[group_name]
+    devices = group_data.get("devices", [])
+    
+    from rich.table import Table
+    table = Table(title=f"Group: {group_name}", border_style="cyan")
+    table.add_column("Device", style="bold")
+    table.add_column("Type", style="dim")
+    
+    for device in devices:
+        table.add_row(device, "SSH")
+    
+    console.print(table)
+    console.print(f"\n[dim]Total devices: {len(devices)}[/dim]")
+
+
+@cmd_group.command("exec")
+@click.argument("group_name")
+@click.argument("command")
+@click.option("--parallel", is_flag=True, default=True, help="Run in parallel")
+def cmd_group_exec(group_name: str, command: str, parallel: bool):
+    """Execute command on all devices in a group."""
+    from pathlib import Path
+    import json
+    from .ssh_manager import SSHManager, parse_device_target
+    
+    groups_file = Path.home() / ".meshpi" / "groups.json"
+    if not groups_file.exists():
+        console.print("[red]No groups found[/red]")
+        return
+    
+    try:
+        groups = json.loads(groups_file.read_text())
+    except:
+        console.print("[red]Error reading groups file[/red]")
+        return
+    
+    if group_name not in groups:
+        console.print(f"[red]Group '{group_name}' not found[/red]")
+        return
+    
+    devices = groups[group_name].get("devices", [])
+    if not devices:
+        console.print(f"[yellow]No devices in group '{group_name}'[/yellow]")
+        return
+    
+    manager = SSHManager()
+    
+    # Add devices from group
+    for device_str in devices:
+        user, host, port = parse_device_target(device_str)
+        device = SSHDevice(host, user, port)
+        manager.add_device(device)
+    
+    # Connect and execute
+    console.print(f"[cyan]→[/cyan] Executing command on group '{group_name}'...")
+    console.print(f"[dim]Command: {command}[/dim]")
+    
+    for device in manager.devices:
+        if manager.connect_to_device(device):
+            exit_code, stdout, stderr = manager.run_command_on_device(device, command)
+            console.print(f"\n[bold]{device}:[/bold]")
+            if exit_code == 0:
+                console.print(stdout)
+            else:
+                console.print(f"[red]Error: {stderr}[/red]")
+            manager.disconnect_device(device)
+
+
+@cmd_group.command("hw-apply")
+@click.argument("group_name")
+@click.argument("profile_ids", nargs=-1)
+@click.option("--parallel", is_flag=True, default=True, help="Run in parallel")
+@click.option("--dry-run", is_flag=True, default=False, help="Show what would be installed")
+@click.option("--interactive", "-i", is_flag=True, default=False, help="Interactive profile selection")
+@click.option("--search", "-s", default=None, help="Search profiles before selection")
+def cmd_group_hw_apply(group_name: str, profile_ids: tuple, parallel: bool, dry_run: bool, interactive: bool, search: str):
+    """Apply hardware profiles to all devices in a group."""
+    from pathlib import Path
+    import json
+    from .ssh_manager import SSHManager, parse_device_target
+    
+    groups_file = Path.home() / ".meshpi" / "groups.json"
+    if not groups_file.exists():
+        console.print("[red]No groups found[/red]")
+        return
+    
+    try:
+        groups = json.loads(groups_file.read_text())
+    except:
+        console.print("[red]Error reading groups file[/red]")
+        return
+    
+    if group_name not in groups:
+        console.print(f"[red]Group '{group_name}' not found[/red]")
+        return
+    
+    devices = groups[group_name].get("devices", [])
+    if not devices:
+        console.print(f"[yellow]No devices in group '{group_name}'[/yellow]")
+        return
+    
+    manager = SSHManager()
+    
+    # Add devices from group
+    for device_str in devices:
+        user, host, port = parse_device_target(device_str)
+        device = SSHDevice(host, user, port)
+        manager.add_device(device)
+    
+    # Connect to devices
+    for device in manager.devices:
+        manager.connect_to_device(device)
+    
+    # Build apply command
+    cmd_parts = ["meshpi", "hw", "apply"]
+    if dry_run:
+        cmd_parts.append("--dry-run")
+    if interactive:
+        cmd_parts.append("--interactive")
+    if search:
+        cmd_parts.extend(["--search", search])
+    cmd_parts.extend(profile_ids)
+    
+    apply_cmd = " ".join(cmd_parts)
+    
+    console.print(f"[cyan]→[/cyan] Applying hardware profiles to group '{group_name}'...")
+    console.print(f"[dim]Command: {apply_cmd}[/dim]")
+    
+    results = manager.run_command_on_all(apply_cmd, parallel=parallel)
+    
+    for device, (exit_code, stdout, stderr) in results.items():
+        console.print(f"\n[bold]{device}:[/bold]")
+        if exit_code == 0:
+            console.print(stdout)
+        else:
+            console.print(f"[red]Error: {stderr}[/red]")
+    
+    # Disconnect
+    for device in manager.devices:
+        manager.disconnect_device(device)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # meshpi hw
 # ─────────────────────────────────────────────────────────────────────────────
@@ -628,6 +906,293 @@ def _print_diag_rich(diag: dict) -> None:
 def cmd_hw():
     """Hardware peripheral profiles — list, inspect, apply."""
     pass
+
+
+@cmd_hw.command("quick-install")
+@click.argument("category", default="")
+@click.option("--target", help="Specific device (user@host:port)")
+@click.option("--group", help="Device group name")
+@click.option("--popular", is_flag=True, default=False, help="Show only popular profiles")
+@click.option("--interactive", "-i", is_flag=True, default=True, help="Interactive selection")
+def cmd_hw_quick_install(category: str, target: Optional[str], group: str, popular: bool, interactive: bool):
+    """
+    \b
+    Quick hardware installation wizard.
+    
+    Examples:
+      meshpi hw quick-install display --interactive
+      meshpi hw quick-install sensor --group sensors
+      meshpi hw quick-install --popular --target pi@192.168.1.100
+    """
+    from .hardware.custom import get_all_profiles
+    from .hardware.profiles import list_profiles
+    from rich.table import Table
+    from rich.prompt import Confirm, Prompt
+    
+    # Get all profiles
+    all_profiles = get_all_profiles()
+    
+    # Filter by category if specified
+    if category:
+        profiles = [p for p in all_profiles.values() if p.category == category]
+    else:
+        profiles = list(all_profiles.values())
+    
+    # Filter by popular if requested
+    if popular:
+        popular_tags = ["oled", "sensor", "hat", "i2c", "spi", "display"]
+        profiles = [p for p in profiles if any(tag in p.tags for tag in popular_tags)]
+    
+    if not profiles:
+        console.print("[yellow]No profiles found[/yellow]")
+        return
+    
+    if interactive:
+        # Show categorized selection
+        categories = {}
+        for profile in profiles:
+            if profile.category not in categories:
+                categories[profile.category] = []
+            categories[profile.category].append(profile)
+        
+        console.print(Panel.fit(
+            "[bold cyan]Quick Hardware Installation[/bold cyan]\n"
+            "[dim]Select a category to browse available hardware[/dim]",
+            border_style="cyan"
+        ))
+        
+        # Show categories
+        cat_table = Table(title="Available Categories", border_style="cyan")
+        cat_table.add_column("Category", style="bold cyan")
+        cat_table.add_column("Count", style="dim")
+        cat_table.add_column("Examples", style="dim")
+        
+        for cat_name, cat_profiles in categories.items():
+            examples = ", ".join([p.name for p in cat_profiles[:2]])
+            if len(cat_profiles) > 2:
+                examples += f" (+{len(cat_profiles)-2})"
+            cat_table.add_row(cat_name, str(len(cat_profiles)), examples)
+        
+        console.print(cat_table)
+        
+        # Let user choose category
+        chosen_cat = Prompt.ask(
+            "[bold]Choose category[/bold]", 
+            choices=list(categories.keys()),
+            default=category if category in categories else list(categories.keys())[0]
+        )
+        
+        # Show profiles in chosen category
+        cat_profiles = categories[chosen_cat]
+        
+        console.print(f"\n[bold cyan]{chosen_cat.title()} Profiles:[/bold cyan]")
+        profile_table = Table(border_style="cyan")
+        profile_table.add_column("ID", style="bold cyan", no_wrap=True)
+        profile_table.add_column("Name")
+        profile_table.add_column("Description", style="dim")
+        profile_table.add_column("Tags", style="dim")
+        
+        for i, profile in enumerate(cat_profiles):
+            profile_table.add_row(
+                profile.id,
+                profile.name,
+                profile.description[:50] + "..." if len(profile.description) > 50 else profile.description,
+                ", ".join(profile.tags[:3])
+            )
+        
+        console.print(profile_table)
+        
+        # Let user select profiles
+        selected_ids = []
+        while True:
+            profile_id = Prompt.ask(
+                "[bold]Enter profile ID to install[/bold]", 
+                default="",
+                show_default=False
+            )
+            if not profile_id:
+                break
+            
+            # Find profile
+            profile = next((p for p in cat_profiles if p.id == profile_id), None)
+            if profile:
+                selected_ids.append(profile_id)
+                console.print(f"[green]✓ Added {profile.name}[/green]")
+            else:
+                console.print(f"[red]Profile '{profile_id}' not found[/red]")
+        
+        if not selected_ids:
+            console.print("[yellow]No profiles selected[/yellow]")
+            return
+        
+        console.print(f"\n[cyan]Selected {len(selected_ids)} profiles:[/cyan]")
+        for pid in selected_ids:
+            profile = next((p for p in cat_profiles if p.id == pid), None)
+            if profile:
+                console.print(f"  • {profile.name}")
+        
+        if not Confirm.ask("\n[bold]Install these profiles?[/bold]", default=True):
+            return
+        
+        # Execute installation
+        if group:
+            # Install on group
+            from pathlib import Path
+            import json
+            groups_file = Path.home() / ".meshpi" / "groups.json"
+            if groups_file.exists():
+                groups = json.loads(groups_file.read_text())
+                if group in groups:
+                    devices = groups[group].get("devices", [])
+                    console.print(f"[cyan]Installing on {len(devices)} devices in group '{group}'...[/cyan]")
+                    # Use group command
+                    from .ssh_manager import SSHManager, parse_device_target
+                    manager = SSHManager()
+                    for device_str in devices:
+                        user, host, port = parse_device_target(device_str)
+                        device = SSHDevice(host, user, port)
+                        manager.add_device(device)
+                    
+                    for device in manager.devices:
+                        manager.connect_to_device(device)
+                    
+                    apply_cmd = f"meshpi hw apply {' '.join(selected_ids)}"
+                    results = manager.run_command_on_all(apply_cmd, parallel=True)
+                    
+                    for device, (exit_code, stdout, stderr) in results.items():
+                        console.print(f"\n[bold]{device}:[/bold]")
+                        if exit_code == 0:
+                            console.print(stdout)
+                        else:
+                            console.print(f"[red]Error: {stderr}[/red]")
+                        manager.disconnect_device(device)
+                    return
+        
+        if target:
+            # Install on specific device
+            from .ssh_manager import SSHManager, parse_device_target
+            user, host, port = parse_device_target(target)
+            device = SSHDevice(host, user, port)
+            manager = SSHManager()
+            manager.add_device(device)
+            
+            if manager.connect_to_device(device):
+                apply_cmd = f"meshpi hw apply {' '.join(selected_ids)}"
+                exit_code, stdout, stderr = manager.run_command_on_device(device, apply_cmd)
+                console.print(f"\n[bold]{device}:[/bold]")
+                if exit_code == 0:
+                    console.print(stdout)
+                else:
+                    console.print(f"[red]Error: {stderr}[/red]")
+                manager.disconnect_device(device)
+            return
+        
+        # Local installation
+        from .hardware.applier import apply_multiple_profiles
+        apply_multiple_profiles(list(selected_ids))
+        
+    else:
+        # Non-interactive: just show available profiles
+        table = Table(title=f"Hardware Profiles ({len(profiles)} found)", border_style="cyan")
+        table.add_column("ID", style="bold cyan", no_wrap=True)
+        table.add_column("Category", style="dim")
+        table.add_column("Name")
+        table.add_column("Description", style="dim")
+        
+        for p in profiles[:20]:  # Limit output
+            table.add_row(
+                p.id, 
+                p.category, 
+                p.name, 
+                p.description[:60] + "..." if len(p.description) > 60 else p.description
+            )
+        
+        console.print(table)
+        if len(profiles) > 20:
+            console.print(f"\n[dim]... and {len(profiles) - 20} more profiles[/dim]")
+
+
+@cmd_hw.command("catalog")
+@click.option("--category", "-c", default=None,
+              help="Filter by category: display|gpio|sensor|camera|audio|networking|hat|storage")
+@click.option("--tag", "-t", default=None, help="Filter by tag (e.g. 'i2c', 'spi', 'oled')")
+@click.option("--popular", is_flag=True, default=False, help="Show only popular profiles")
+@click.option("--installed", is_flag=True, default=False, help="Show only installed profiles")
+@click.option("--format", default="table", type=click.Choice(["table", "json", "list"]), help="Output format")
+def cmd_hw_catalog(category: str, tag: str, popular: bool, installed: bool, format: str):
+    """Browse hardware catalog with filtering options."""
+    from .hardware.custom import get_all_profiles
+    from .hardware.profiles import list_profiles
+    
+    # Get all profiles
+    all_profiles = get_all_profiles()
+    profiles = list(all_profiles.values())
+    
+    # Apply filters
+    if category:
+        profiles = [p for p in profiles if p.category == category]
+    
+    if tag:
+        profiles = [p for p in profiles if tag in p.tags]
+    
+    if popular:
+        popular_tags = ["oled", "sensor", "hat", "i2c", "spi", "display", "camera"]
+        profiles = [p for p in profiles if any(tag in p.tags for tag in popular_tags)]
+    
+    if installed:
+        # TODO: Check what's actually installed on the system
+        console.print("[yellow]Installed filter not yet implemented[/yellow]")
+    
+    if format == "json":
+        import json
+        data = []
+        for p in profiles:
+            data.append({
+                "id": p.id,
+                "name": p.name,
+                "category": p.category,
+                "description": p.description,
+                "tags": p.tags,
+                "packages": p.packages
+            })
+        console.print(json.dumps(data, indent=2))
+    
+    elif format == "list":
+        for p in profiles:
+            console.print(f"{p.id:30} {p.category:15} {p.name}")
+    
+    else:  # table format
+        from rich.table import Table
+        
+        # Group by category
+        categories = {}
+        for p in profiles:
+            if p.category not in categories:
+                categories[p.category] = []
+            categories[p.category].append(p)
+        
+        for cat_name, cat_profiles in categories.items():
+            console.print(f"\n[bold cyan]{cat_name.title()} ({len(cat_profiles)}):[/bold cyan]")
+            
+            table = Table(border_style="cyan", show_header=True, header_style="bold cyan")
+            table.add_column("ID", style="bold cyan", no_wrap=True, width=25)
+            table.add_column("Name", width=30)
+            table.add_column("Description", style="dim", width=50)
+            table.add_column("Tags", style="dim", width=20)
+            
+            for p in cat_profiles[:10]:  # Limit per category
+                table.add_row(
+                    p.id,
+                    p.name,
+                    p.description[:47] + "..." if len(p.description) > 47 else p.description,
+                    ", ".join(p.tags[:3])
+                )
+            
+            console.print(table)
+            if len(cat_profiles) > 10:
+                console.print(f"[dim]... and {len(cat_profiles) - 10} more in {cat_name}[/dim]")
+        
+        console.print(f"\n[dim]Total: {len(profiles)} profiles[/dim]")
 
 
 @cmd_hw.command("list")

@@ -1,0 +1,3 @@
+
+# meshpi hardware profile
+dtparam=i2c_arm=on

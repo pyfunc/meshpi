@@ -1,3 +1,40 @@
+## [0.1.23] - 2026-02-24
+
+### Summary
+
+fix(config): CLI interface improvements
+
+### Docs
+
+- docs: update RPI-TESTING-README.md
+- docs: update HARDWARE-GROUP-MANAGEMENT.md
+
+### Test
+
+- scripts: update batch-rpi-test.sh
+- scripts: update run-rpi-tests.sh
+- scripts: update test-doctor.sh
+- scripts: update test-enhanced-cli.sh
+- scripts: update test-list.sh
+- scripts: update test-restart.sh
+- scripts: update test-ssh-host.sh
+- scripts: update test-ssh-scan-identify.sh
+
+### Other
+
+- update <MagicMock name='_config_txt_path()' id='140086943225840'>
+- update <MagicMock name='_config_txt_path()' id='140086943227184'>
+- update <MagicMock name='_config_txt_path()' id='140086943227856'>
+- update <MagicMock name='_config_txt_path()' id='140086943228192'>
+- update <MagicMock name='_config_txt_path()' id='140086943231552'>
+- update <MagicMock name='_config_txt_path()' id='140086943233232'>
+- update <MagicMock name='_config_txt_path()' id='140086945398864'>
+- update <MagicMock name='_config_txt_path()' id='140086945399200'>
+- update <MagicMock name='_config_txt_path()' id='140086945402224'>
+- update <MagicMock name='_config_txt_path()' id='140086957155264'>
+- ... and 12 more
+
+
 ## [0.1.22] - 2026-02-24
 
 ### Summary
@@ -112,7 +149,7 @@ feat(tests): code quality metrics with 5 supporting modules
 
 ### Other
 
-- scripts: update batch-rpi-test.sh
+- scripts: update test/batch-rpi-test.sh
 
 
 ## [0.1.15] - 2026-02-24

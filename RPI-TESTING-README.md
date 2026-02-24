@@ -22,7 +22,7 @@ This comprehensive testing suite validates MeshPi installation on different RPi 
 ./remote-rpi-test.sh pi@192.168.1.100
 
 # Test multiple RPis simultaneously
-./batch-rpi-test.sh
+./test/batch-rpi-test.sh
 
 # Auto-diagnose and repair RPi issues
 meshpi doctor pi@192.168.188.148
@@ -64,19 +64,19 @@ meshpi doctor --local
 - `docker/test-rpi/` - Test scripts and utilities
 - `run-rpi-tests.sh` - Main Docker test runner script
 - `remote-rpi-test.sh` - SSH test script for real RPi hardware
-- `batch-rpi-test.sh` - Batch testing script for multiple RPis
-- `diagnose-rpi.sh` - Comprehensive RPi diagnostic script
-- `fix-rpi-meshpi.sh` - Automated fix script for common issues
+- `test/batch-rpi-test.sh` - Batch testing script for multiple RPis
+- `scripts/diagnose-rpi.sh` - Comprehensive RPi diagnostic script
+- `scripts/fix-rpi-meshpi.sh` - Automated fix script for common issues
 - `meshpi/doctor.py` - Enhanced doctor with auto-diagnosis and repair
-- `monitor-repair.sh` - RPi-side repair status monitor
-- `show-repair-status.sh` - Visual repair status display
-- `rpi-service-manager.sh` - Comprehensive service management
+- `scripts/monitor-repair.sh` - RPi-side repair status monitor
+- `scripts/show-repair-status.sh` - Visual repair status display
+- `scripts/rpi-service-manager.sh` - Comprehensive service management
 - `meshpi/ssh_manager.py` - SSH device management system
-- `test-doctor.sh` - Test script for doctor functionality
-- `test-restart.sh` - Test script for restart functionality
-- `test-list.sh` - Test script for list functionality
-- `test-ssh-host.sh` - Test script for SSH host functionality
-- `test-enhanced-cli.sh` - Test script for enhanced CLI features
+- `test/test-doctor.sh` - Test script for doctor functionality
+- `test/test-restart.sh` - Test script for restart functionality
+- `test/test-list.sh` - Test script for list functionality
+- `test/test-ssh-host.sh` - Test script for SSH host functionality
+- `test/test-enhanced-cli.sh` - Test script for enhanced CLI features
 - `.github/workflows/test-rpi-arch.yml` - CI/CD workflow
 - `docs/RPI-TESTING.md` - Comprehensive testing guide
 - `docs/RPI-TEST-RESULTS.md` - Test results and known issues
@@ -125,7 +125,7 @@ meshpi doctor --local
 ./remote-rpi-test.sh pi@192.168.1.100
 
 # Batch test multiple RPis
-./batch-rpi-test.sh --devices "pi@rpi1.local pi@rpi2.local"
+./test/batch-rpi-test.sh --devices "pi@rpi1.local pi@rpi2.local"
 
 # Auto-diagnose and repair RPi issues
 meshpi doctor pi@192.168.188.148
