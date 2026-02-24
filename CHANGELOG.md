@@ -1,3 +1,22 @@
+## [0.1.12] - 2026-02-24
+
+### Summary
+
+feat(docs): deep code analysis engine with 6 supporting modules
+
+### Docs
+
+- docs: update README
+
+### Build
+
+- update pyproject.toml
+
+### Other
+
+- update meshpi/py.typed
+
+
 ## [0.1.11] - 2026-02-24
 
 ### Summary

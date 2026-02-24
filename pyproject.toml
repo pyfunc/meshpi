@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "meshpi"
-version = "0.1.11"
+version = "0.1.12"
 description = "🚀 Zero-touch provisioning for Raspberry Pi fleets - Configure WiFi, SSH, users, hardware peripherals, and manage devices through encrypted mesh networking"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -12,19 +12,50 @@ license = "Apache-2.0"
 authors = [
     { name = "Tom Sapletta", email = "tom@sapletta.com" },
 ]
-keywords = ["raspberry-pi", "mesh", "configuration", "iot", "automation", "fleet-management", "zero-touch", "provisioning", "ssh", "wifi", "hardware", "gpio", "i2c", "spi"]
+maintainers = [
+    { name = "Tom Sapletta", email = "tom@sapletta.com" },
+]
+keywords = [
+    "raspberry-pi",
+    "mesh",
+    "configuration",
+    "iot",
+    "automation",
+    "fleet-management",
+    "zero-touch",
+    "provisioning",
+    "ssh",
+    "wifi",
+    "hardware",
+    "gpio",
+    "i2c",
+    "spi",
+    "rpi",
+    "embedded",
+    "devops",
+    "infrastructure-as-code",
+]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Environment :: Console",
+    "Environment :: Web Environment",
+    "Framework :: FastAPI",
     "Intended Audience :: Developers",
     "Intended Audience :: System Administrators",
-    "Topic :: System :: Systems Administration",
-    "Topic :: System :: Networking",
+    "Intended Audience :: Telecommunications Industry",
+    "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: System :: Systems Administration",
+    "Topic :: System :: Networking",
+    "Topic :: System :: Hardware",
+    "Topic :: Security :: Cryptography",
+    "Topic :: Scientific/Engineering :: Atmospheric Science",
+    "Typing :: Typed",
 ]
 dependencies = [
     "cryptography>=41.0",
@@ -51,14 +82,45 @@ dev = [
     "ruff>=0.1",
     "mypy>=1.0",
 ]
+llm = [
+    "litellm>=1.0",
+]
+all = [
+    "meshpi[dev,llm]",
+]
 
 [project.scripts]
 meshpi = "meshpi.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/pyfunc/meshpi"
-Repository = "https://github.com/pyfunc/meshpi"
+Documentation = "https://github.com/pyfunc/meshpi#readme"
+Repository = "https://github.com/pyfunc/meshpi.git"
+Issues = "https://github.com/pyfunc/meshpi/issues"
+Changelog = "https://github.com/pyfunc/meshpi/blob/main/CHANGELOG.md"
+Funding = "https://github.com/sponsors/pyfunc"
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["meshpi*"]
+
+[tool.setuptools.package-data]
+meshpi = ["py.typed"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_ignores = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-v --tb=short"
