@@ -1,0 +1,45 @@
+# 🚗 DC Motor Controller with PWM
+# L298N H-bridge motor controller with PWM speed control and direction control
+# Perfect for robotics, cars, boats, and motorized projects
+
+id: "motor_l298n_controller"
+name: "L298N DC Motor Controller"
+category: "motor"
+description: "Complete L298N H-bridge motor control system with PWM speed control, direction switching, and safety features"
+
+# System packages required
+packages:
+  - "python3-pip"
+  - "python3-dev"
+  - "python3-gpiozero"
+  - "python3-numpy"
+
+# Kernel modules to load
+kernel_modules: []
+
+# Device tree overlays
+overlays: []
+
+# /boot/config.txt modifications
+config_txt_lines:
+  - "gpio=24,25,23,22,27,17=a0"
+
+# Post-installation commands
+post_commands:
+  - "pip3 install RPi.GPIO"
+  - "pip3 install gpiozero"
+  - "pip3 install numpy"
+  - "pip3 install matplotlib"
+  - "usermod -a -G gpio $USER"
+  - "echo 'L298N Motor Controller setup complete!'"
+
+# Tags for searching
+tags:
+  - "motor"
+  - "l298n"
+  - "pwm"
+  - "robotics"
+  - "dc-motor"
+  - "h-bridge"
+  - "speed-control"
+  - "automation"

@@ -1,0 +1,61 @@
+# 🎩 Waveshare IoT HAT
+# Waveshare IoT HAT with LoRa, GPS, and environmental sensors
+# Perfect for IoT projects, tracking, and remote monitoring
+
+id: "waveshare_iot_hat"
+name: "Waveshare IoT HAT"
+category: "hat"
+description: "Waveshare IoT HAT with LoRa communication, GPS tracking, temperature sensor, and IoT connectivity"
+
+# System packages required
+packages:
+  - "python3-pip"
+  - "python3-dev"
+  - "python3-serial"
+  - "python3-spidev"
+  - "gpsd"
+  - "gpsd-clients"
+  - "i2c-tools"
+
+# Kernel modules to load
+kernel_modules:
+  - "i2c-dev"
+  - "i2c-bcm2708"
+  - "spi-bcm2835"
+  - "spidev"
+
+# Device tree overlays
+overlays:
+  - "i2c-arm"
+  - "spi0-cs"
+
+# /boot/config.txt modifications
+config_txt_lines:
+  - "dtparam=i2c_arm=on"
+  - "dtparam=i2c_arm_baudrate=400000"
+  - "dtparam=spi=on"
+  - "dtoverlay=spi0-cs"
+
+# Post-installation commands
+post_commands:
+  - "pip3 install adafruit-circuitpython-lora"
+  - "pip3 install gps3"
+  - "pip3 install pyserial"
+  - "pip3 install spidev"
+  - "pip3 install adafruit-circuitpython-mcp9808"
+  - "systemctl enable gpsd"
+  - "systemctl start gpsd"
+  - "i2cdetect -y 1"
+  - "usermod -a -G i2c,spi,gpio $USER"
+  - "echo 'Waveshare IoT HAT setup complete!'"
+
+# Tags for searching
+tags:
+  - "hat"
+  - "waveshare"
+  - "iot"
+  - "lora"
+  - "gps"
+  - "tracking"
+  - "environmental"
+  - "remote-monitoring"

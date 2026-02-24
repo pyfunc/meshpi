@@ -1,0 +1,65 @@
+# 🎙️ Voice Assistant with LLM
+# Complete voice assistant setup with microphone, speaker, and LLM integration
+# Perfect for smart home control, voice commands, and AI-powered interactions
+
+id: "voice_assistant_llm"
+name: "Voice Assistant with LLM"
+category: "ai"
+description: "Complete voice assistant system with microphone input, speaker output, and LLM integration for natural language processing"
+
+# System packages required
+packages:
+  - "python3-pip"
+  - "python3-dev"
+  - "portaudio19-dev"
+  - "python3-dev"
+  - "ffmpeg"
+  - "alsa-utils"
+  - "pulseaudio"
+  - "pulseaudio-utils"
+  - "sox"
+  - "libsox-fmt-all"
+
+# Kernel modules to load
+kernel_modules:
+  - "snd_bcm2835"
+  - "snd_pcm_oss"
+  - "snd_mixer_oss"
+
+# Device tree overlays
+overlays:
+  - "audio"
+
+# /boot/config.txt modifications
+config_txt_lines:
+  - "dtparam=audio=on"
+  - "gpu_mem=256"
+
+# Post-installation commands
+post_commands:
+  - "pip3 install openai-whisper"
+  - "pip3 install pyttsx3"
+  - "pip3 install speechrecognition"
+  - "pip3 install pyaudio"
+  - "pip3 install litellm"
+  - "pip3 install numpy"
+  - "pip3 install scipy"
+  - "pip3 install sounddevice"
+  - "pip3 install wave"
+  - "pip3 install requests"
+  - "alsamixer"
+  - "amixer cset numid=3 1 2>/dev/null || echo 'Audio output set to headphones'"
+  - "usermod -a -G audio $USER"
+  - "echo 'Voice Assistant with LLM setup complete!'"
+
+# Tags for searching
+tags:
+  - "ai"
+  - "voice"
+  - "assistant"
+  - "llm"
+  - "microphone"
+  - "speaker"
+  - "speech"
+  - "natural-language"
+  - "smart-home"

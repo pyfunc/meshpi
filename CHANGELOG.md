@@ -1,3 +1,28 @@
+## [0.1.26] - 2026-02-24
+
+### Summary
+
+feat(examples): CLI interface improvements
+
+### Docs
+
+- docs: update CONTRIBUTING.md
+- docs: update EASY_PROFILE_MANAGEMENT.md
+
+### Other
+
+- config: update adafruit_fruit_hat.yaml
+- config: update lcd_7_touchscreen_hdmi.yaml
+- config: update motor_l298n_controller.yaml
+- config: update pimoroni_explorer_hat.yaml
+- config: update pisugar_ups_hat.yaml
+- config: update servo_pca9685_controller.yaml
+- config: update voice_assistant_llm.yaml
+- config: update waveshare_iot_hat.yaml
+- config: update waveshare_lcd_43_touchscreen.yaml
+- update meshpi/cli.py
+
+
 ## [0.1.25] - 2026-02-24
 
 ### Summary

@@ -1724,7 +1724,7 @@ def cmd_doctor(target: str, password: bool, key: str, local: bool):
       meshpi doctor pi@rpi --key ~/.ssh/custom_key
     """
     if local or not target:
-        #अंतRun local diagnostics
+        # Run local diagnostics
         from .diagnostics import collect, format_summary
         import json as json_mod
         

@@ -1,0 +1,52 @@
+# 🎩 PiSugar UPS HAT
+# PiSugar UPS and power management HAT with battery monitoring, safe shutdown, and power management
+# Essential for portable Raspberry Pi projects and backup power systems
+
+id: "pisugar_ups_hat"
+name: "PiSugar UPS HAT"
+category: "hat"
+description: "PiSugar UPS HAT with battery monitoring, safe shutdown, power management, and I2C interface"
+
+# System packages required
+packages:
+  - "python3-pip"
+  - "python3-dev"
+  - "i2c-tools"
+  - "python3-smbus"
+  - "git"
+
+# Kernel modules to load
+kernel_modules:
+  - "i2c-dev"
+  - "i2c-bcm2708"
+
+# Device tree overlays
+overlays:
+  - "i2c-arm"
+
+# /boot/config.txt modifications
+config_txt_lines:
+  - "dtparam=i2c_arm=on"
+  - "dtparam=i2c_arm_baudrate=400000"
+
+# Post-installation commands
+post_commands:
+  - "pip3 install pisugar"
+  - "pip3 install adafruit-circuitpython-ads1115"
+  - "git clone https://github.com/PiSugar/PiSugar.git /tmp/pisugar"
+  - "cd /tmp/pisugar && python3 setup.py install && cd - && rm -rf /tmp/pisugar"
+  - "i2cdetect -y 1"
+  - "usermod -a -G i2c,gpio $USER"
+  - "systemctl enable pisugar-server 2>/dev/null || echo 'PiSugar service setup'"
+  - "echo 'PiSugar UPS HAT setup complete!'"
+
+# Tags for searching
+tags:
+  - "hat"
+  - "ups"
+  - "pisugar"
+  - "battery"
+  - "power-management"
+  - "i2c"
+  - "backup-power"
+  - "portable"
