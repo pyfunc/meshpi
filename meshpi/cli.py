@@ -22,16 +22,34 @@ Commands:
   meshpi pendrive seed       Seed USB with client key (CLIENT)
   meshpi pendrive apply      Apply config from USB (CLIENT)
   meshpi info                Show local key/config state
+  meshpi monitor              Monitor status of devices or groups
   meshpi ssh scan            Scan network for SSH devices
   meshpi ssh add <target>    Add SSH device to management
   meshpi ssh list            List managed SSH devices
   meshpi ssh connect         Connect to SSH device(s)
   meshpi ssh shell <target>  Open interactive SSH shell to device
   meshpi ssh exec <cmd>      Execute command on SSH device(s)
+  meshpi ssh batch <cmd>     Execute custom command on multiple devices
+  meshpi ssh system-update  Update package lists on device(s)
+  meshpi ssh system-upgrade  Upgrade packages on device(s)
   meshpi ssh install         Install MeshPi on SSH device(s)
   meshpi ssh update          Update MeshPi on SSH device(s)
   meshpi ssh restart         Restart MeshPi service on SSH device(s)
   meshpi ssh transfer        Transfer files to/from SSH device(s)
+
+Group Management Examples:
+  meshpi group create servers          Create device group
+  meshpi group add-device servers pi@192.168.1.100  Add device to group
+  meshpi group list                   List all groups
+  meshpi group status servers          Check status of group devices
+  meshpi group exec servers "uptime"   Run command on group
+  meshpi group system-update servers   Update all devices in group
+
+Monitoring Examples:
+  meshpi monitor                       Monitor all devices once
+  meshpi monitor --group servers       Monitor specific group
+  meshpi monitor --continuous          Continuous monitoring
+  meshpi monitor --interval 30         Monitor every 30 seconds
 
 Doctor Examples:
   meshpi doctor pi@192.168.1.100      # Diagnose and auto-repair
@@ -902,6 +920,167 @@ def cmd_restart(target: str | None, password: bool, key: str | None, service_onl
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# meshpi monitor
+# ─────────────────────────────────────────────────────────────────────────────
+
+@main.command("monitor")
+@click.option("--group", help="Monitor specific device group")
+@click.option("--interval", default=60, help="Monitoring interval in seconds")
+@click.option("--continuous", is_flag=True, default=False, help="Continuous monitoring")
+def cmd_monitor(group: Optional[str], interval: int, continuous: bool):
+    """
+    Monitor status of devices or groups.
+    
+    Examples:
+      meshpi monitor                    # Monitor all devices
+      meshpi monitor --group servers    # Monitor specific group
+      meshpi monitor --interval 30      # Monitor every 30 seconds
+      meshpi monitor --continuous       # Continuous monitoring
+    """
+    from .ssh_manager import SSHManager, parse_device_target
+    from pathlib import Path
+    import json
+    
+    if group:
+        # Monitor specific group
+        groups_file = Path.home() / ".meshpi" / "groups.json"
+        
+        if not groups_file.exists():
+            console.print("[red]No groups found[/red]")
+            return
+        
+        groups = json.loads(groups_file.read_text())
+        
+        if group not in groups:
+            console.print(f"[red]Group '{group}' not found[/red]")
+            return
+        
+        devices = groups[group]["devices"]
+        if not devices:
+            console.print(f"[yellow]No devices in group '{group}'[/yellow]")
+            return
+        
+        console.print(f"[bold cyan]Monitoring Group: {group}[/bold cyan]")
+        
+        # Create SSH manager and add devices
+        manager = SSHManager()
+        target_devices = []
+        for device_str in devices:
+            user, host, port = parse_device_target(device_str)
+            from .ssh_manager import SSHDevice
+            device = SSHDevice(host, user, port)
+            manager.add_device(device)
+            target_devices.append(device)
+        
+    else:
+        # Monitor all registered devices
+        from .registry import registry as reg
+        all_devices = reg.all_devices()
+        
+        if not all_devices:
+            console.print("[yellow]No devices found[/yellow]")
+            return
+        
+        console.print("[bold cyan]Monitoring All Devices[/bold cyan]")
+        
+        # Create SSH manager from registry devices
+        manager = SSHManager()
+        target_devices = []
+        
+        for device in all_devices:
+            from .ssh_manager import SSHDevice
+            ssh_device = SSHDevice(device.host, device.user, device.port)
+            manager.add_device(ssh_device)
+            target_devices.append(ssh_device)
+    
+    # Monitor function
+    def monitor_once():
+        """Perform one monitoring cycle."""
+        console.print(f"\n[cyan]→ Monitoring {len(target_devices)} device(s)...[/cyan]")
+        
+        status_table = Table(title=f"Device Status - {time.strftime('%H:%M:%S')}", border_style="cyan")
+        status_table.add_column("Device", style="bold")
+        status_table.add_column("Status", style="bold")
+        status_table.add_column("Uptime", style="dim")
+        status_table.add_column("Load", style="dim")
+        status_table.add_column("Memory", style="dim")
+        status_table.add_column("Temp", style="dim")
+        status_table.add_column("MeshPi", style="dim")
+        
+        online_count = 0
+        meshpi_count = 0
+        
+        for device in target_devices:
+            try:
+                if manager.connect_to_device(device):
+                    # Get system info
+                    info = manager.get_device_info(device)
+                    
+                    uptime = info.get("uptime", "N/A").split()[0] if info.get("uptime") != "N/A" else "N/A"
+                    load = info.get("uptime", "N/A").split("load average:")[1].strip() if "load average:" in info.get("uptime", "") else "N/A"
+                    memory = info.get("memory", "N/A").split()[1] if info.get("memory", "N/A") != "N/A" else "N/A"
+                    temp = info.get("cpu_temp", "N/A")
+                    meshpi_version = info.get("meshpi_version", "N/A")
+                    
+                    if meshpi_version != "N/A" and "not installed" not in meshpi_version:
+                        meshpi_status = "[green]✓[/green]"
+                        meshpi_count += 1
+                    else:
+                        meshpi_status = "[red]✗[/red]"
+                    
+                    status_table.add_row(
+                        str(device),
+                        "[green]ONLINE[/green]",
+                        uptime,
+                        load,
+                        memory,
+                        temp,
+                        meshpi_status
+                    )
+                    online_count += 1
+                else:
+                    status_table.add_row(
+                        str(device),
+                        "[red]OFFLINE[/red]",
+                        "—",
+                        "—",
+                        "—",
+                        "—",
+                        "[red]✗[/red]"
+                    )
+            except Exception as e:
+                status_table.add_row(
+                    str(device),
+                    "[red]ERROR[/red]",
+                    str(e)[:15],
+                    "—",
+                    "—",
+                    "—",
+                    "[red]✗[/red]"
+                )
+            finally:
+                manager.disconnect_device(device)
+        
+        console.print(status_table)
+        console.print(f"\n[green]Online: {online_count}/{len(target_devices)} devices[/green]")
+        console.print(f"[green]MeshPi: {meshpi_count}/{len(target_devices)} devices[/green]")
+        
+        return online_count, meshpi_count
+    
+    # Initial monitoring
+    monitor_once()
+    
+    if continuous:
+        console.print(f"\n[dim]Continuous monitoring every {interval}s (Ctrl+C to stop)[/dim]")
+        try:
+            while True:
+                time.sleep(interval)
+                monitor_once()
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Monitoring stopped[/yellow]")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # meshpi ssh
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -1558,6 +1737,337 @@ def cmd_group_add_device(group_name: str, target: str):
         console.print(f"[green]✓ Added {device_str} to group '{group_name}'[/green]")
     else:
         console.print(f"[yellow]Device already in group[/yellow]")
+
+
+@cmd_group.command("remove-device")
+@click.argument("group_name")
+@click.argument("target")
+def cmd_group_remove_device(group_name: str, target: str):
+    """Remove device from a group."""
+    from .ssh_manager import parse_device_target
+    from pathlib import Path
+    import json
+    
+    groups_file = Path.home() / ".meshpi" / "groups.json"
+    
+    if not groups_file.exists():
+        console.print("[red]No groups found[/red]")
+        return
+    
+    groups = json.loads(groups_file.read_text())
+    
+    if group_name not in groups:
+        console.print(f"[red]Group '{group_name}' not found[/red]")
+        return
+    
+    # Parse target
+    user, host, port = parse_device_target(target)
+    device_str = f"{user}@{host}:{port}"
+    
+    # Remove device from group
+    if device_str in groups[group_name]["devices"]:
+        groups[group_name]["devices"].remove(device_str)
+        groups_file.write_text(json.dumps(groups, indent=2))
+        console.print(f"[green]✓ Removed {device_str} from group '{group_name}'[/green]")
+    else:
+        console.print(f"[yellow]Device not in group[/yellow]")
+
+
+@cmd_group.command("show")
+@click.argument("group_name")
+def cmd_group_show(group_name: str):
+    """Show details of a specific group."""
+    from pathlib import Path
+    import json
+    
+    groups_file = Path.home() / ".meshpi" / "groups.json"
+    
+    if not groups_file.exists():
+        console.print("[red]No groups found[/red]")
+        return
+    
+    groups = json.loads(groups_file.read_text())
+    
+    if group_name not in groups:
+        console.print(f"[red]Group '{group_name}' not found[/red]")
+        return
+    
+    group_data = groups[group_name]
+    
+    console.print(Panel.fit(
+        f"[bold cyan]Group: {group_name}[/bold cyan]\n"
+        f"[dim]{group_data.get('description', 'No description')}[/dim]",
+        border_style="cyan"
+    ))
+    
+    # Group info
+    info_table = Table(show_header=False, box=None)
+    info_table.add_column("Property", style="cyan")
+    info_table.add_column("Value")
+    
+    created = time.strftime("%Y-%m-%d %H:%M", time.localtime(group_data.get("created_at", 0)))
+    info_table.add_row("Name", group_data["name"])
+    info_table.add_row("Description", group_data.get("description", "—"))
+    info_table.add_row("Devices", str(len(group_data.get("devices", []))))
+    info_table.add_row("Created", created)
+    
+    console.print(info_table)
+    
+    # Device list
+    devices = group_data.get("devices", [])
+    if devices:
+        console.print(f"\n[bold]Devices ({len(devices)}):[/bold]")
+        for i, device in enumerate(devices, 1):
+            console.print(f"  {i}. {device}")
+    else:
+        console.print("\n[dim]No devices in group[/dim]")
+
+
+@cmd_group.command("delete")
+@click.argument("group_name")
+@click.option("--confirm", is_flag=True, default=False, help="Skip confirmation")
+def cmd_group_delete(group_name: str, confirm: bool):
+    """Delete a device group."""
+    from pathlib import Path
+    import json
+    
+    groups_file = Path.home() / ".meshpi" / "groups.json"
+    
+    if not groups_file.exists():
+        console.print("[red]No groups found[/red]")
+        return
+    
+    groups = json.loads(groups_file.read_text())
+    
+    if group_name not in groups:
+        console.print(f"[red]Group '{group_name}' not found[/red]")
+        return
+    
+    device_count = len(groups[group_name].get("devices", []))
+    
+    if not confirm:
+        if not Confirm.ask(
+            f"[red]Delete group '{group_name}' with {device_count} device(s)?[/red]", 
+            default=False
+        ):
+            console.print("[dim]Operation cancelled.[/dim]")
+            return
+    
+    # Delete group
+    del groups[group_name]
+    groups_file.write_text(json.dumps(groups, indent=2))
+    console.print(f"[green]✓ Group '{group_name}' deleted[/green]")
+
+
+@cmd_group.command("update")
+@click.argument("group_name")
+@click.option("--name", help="New group name")
+@click.option("--description", help="New group description")
+def cmd_group_update(group_name: str, name: Optional[str], description: Optional[str]):
+    """Update group properties."""
+    from pathlib import Path
+    import json
+    
+    groups_file = Path.home() / ".meshpi" / "groups.json"
+    
+    if not groups_file.exists():
+        console.print("[red]No groups found[/red]")
+        return
+    
+    groups = json.loads(groups_file.read_text())
+    
+    if group_name not in groups:
+        console.print(f"[red]Group '{group_name}' not found[/red]")
+        return
+    
+    group_data = groups[group_name]
+    
+    # Update properties
+    if name:
+        # Move group to new key
+        groups[name] = groups.pop(group_name)
+        group_data = groups[name]
+        group_data["name"] = name
+        console.print(f"[green]✓ Group renamed to '{name}'[/green]")
+        group_name = name
+    
+    if description is not None:
+        group_data["description"] = description
+        console.print(f"[green]✓ Description updated[/green]")
+    
+    # Save changes
+    groups_file.write_text(json.dumps(groups, indent=2))
+    console.print(f"[green]✓ Group '{group_name}' updated[/green]")
+
+
+@cmd_group.command("status")
+@click.argument("group_name")
+@click.option("--parallel", is_flag=True, default=True, help="Run in parallel")
+def cmd_group_status(group_name: str, parallel: bool):
+    """Check status of all devices in a group."""
+    from .ssh_manager import SSHManager
+    from pathlib import Path
+    import json
+    
+    groups_file = Path.home() / ".meshpi" / "groups.json"
+    
+    if not groups_file.exists():
+        console.print("[red]No groups found[/red]")
+        return
+    
+    groups = json.loads(groups_file.read_text())
+    
+    if group_name not in groups:
+        console.print(f"[red]Group '{group_name}' not found[/red]")
+        return
+    
+    devices = groups[group_name]["devices"]
+    if not devices:
+        console.print(f"[yellow]No devices in group '{group_name}'[/yellow]")
+        return
+    
+    console.print(f"[bold cyan]Group Status: {group_name}[/bold cyan]")
+    
+    # Create SSH manager and add devices
+    manager = SSHManager()
+    for device_str in devices:
+        user, host, port = parse_device_target(device_str)
+        from .ssh_manager import SSHDevice
+        device = SSHDevice(host, user, port)
+        manager.add_device(device)
+    
+    # Connect and check status
+    console.print("[cyan]→[/cyan] Checking device status...")
+    
+    status_table = Table(title=f"Group '{group_name}' Status", border_style="cyan")
+    status_table.add_column("Device", style="bold")
+    status_table.add_column("Status", style="bold")
+    status_table.add_column("Uptime", style="dim")
+    status_table.add_column("Load", style="dim")
+    status_table.add_column("Memory", style="dim")
+    status_table.add_column("Temp", style="dim")
+    
+    online_count = 0
+    
+    for device in manager.devices:
+        try:
+            if manager.connect_to_device(device):
+                # Get system info
+                info = manager.get_device_info(device)
+                
+                uptime = info.get("uptime", "N/A").split()[0] if info.get("uptime") != "N/A" else "N/A"
+                load = info.get("uptime", "N/A").split("load average:")[1].strip() if "load average:" in info.get("uptime", "") else "N/A"
+                memory = info.get("memory", "N/A").split()[1] if info.get("memory", "N/A") != "N/A" else "N/A"
+                temp = info.get("cpu_temp", "N/A")
+                
+                status_table.add_row(
+                    str(device),
+                    "[green]ONLINE[/green]",
+                    uptime,
+                    load,
+                    memory,
+                    temp
+                )
+                online_count += 1
+            else:
+                status_table.add_row(
+                    str(device),
+                    "[red]OFFLINE[/red]",
+                    "—",
+                    "—",
+                    "—",
+                    "—"
+                )
+        except Exception as e:
+            status_table.add_row(
+                str(device),
+                "[red]ERROR[/red]",
+                str(e)[:20],
+                "—",
+                "—",
+                "—"
+            )
+        finally:
+            manager.disconnect_device(device)
+    
+    console.print(status_table)
+    console.print(f"\n[green]Online: {online_count}/{len(devices)} devices[/green]")
+
+
+@cmd_group.command("system-update")
+@click.argument("group_name")
+@click.option("--parallel", is_flag=True, default=True, help="Run in parallel")
+def cmd_group_system_update(group_name: str, parallel: bool):
+    """Update package lists on all devices in a group."""
+    from .ssh_manager import SSHManager
+    from pathlib import Path
+    import json
+    
+    groups_file = Path.home() / ".meshpi" / "groups.json"
+    
+    if not groups_file.exists():
+        console.print("[red]No groups found[/red]")
+        return
+    
+    groups = json.loads(groups_file.read_text())
+    
+    if group_name not in groups:
+        console.print(f"[red]Group '{group_name}' not found[/red]")
+        return
+    
+    devices = groups[group_name]["devices"]
+    if not devices:
+        console.print(f"[yellow]No devices in group '{group_name}'[/yellow]")
+        return
+    
+    # Create SSH manager and add devices
+    manager = SSHManager()
+    for device_str in devices:
+        user, host, port = parse_device_target(device_str)
+        from .ssh_manager import SSHDevice
+        device = SSHDevice(host, user, port)
+        manager.add_device(device)
+    
+    # Confirm operation
+    console.print(f"[bold cyan]Group System Update[/bold cyan]")
+    console.print(f"[dim]Group: {group_name}[/dim]")
+    console.print(f"[dim]Devices: {len(devices)}[/dim]")
+    
+    if not Confirm.ask(f"[yellow]Update package lists on {len(devices)} device(s)?[/yellow]", default=False):
+        console.print("[dim]Operation cancelled.[/dim]")
+        return
+    
+    # Connect and update
+    console.print("[cyan]→[/cyan] Connecting to devices...")
+    for device in manager.devices:
+        manager.connect_to_device(device)
+    
+    console.print(f"[cyan]→[/cyan] Updating package lists...")
+    results = manager.run_command_on_all("sudo apt update", parallel=parallel)
+    
+    # Display results
+    table = Table(title=f"Group '{group_name}' Update Results", border_style="cyan")
+    table.add_column("Device", style="bold")
+    table.add_column("Exit Code", style="dim")
+    table.add_column("Output")
+    table.add_column("Error", style="red")
+    
+    success_count = 0
+    for device, (exit_code, stdout, stderr) in results.items():
+        exit_status = "[green]0[/green]" if exit_code == 0 else f"[red]{exit_code}[/red]"
+        output = stdout[:150] + "..." if len(stdout) > 150 else stdout
+        error = stderr[:100] + "..." if len(stderr) > 100 else stderr
+        
+        table.add_row(str(device), exit_status, output, error)
+        if exit_code == 0:
+            success_count += 1
+    
+    console.print(table)
+    console.print(f"\n[green]Success: {success_count}/{len(devices)} devices[/green]")
+    
+    # Disconnect
+    for device in manager.devices:
+        manager.disconnect_device(device)
 
 
 @cmd_group.command("exec")
@@ -2307,6 +2817,283 @@ def device_menu(device):
             if Confirm.ask(f"Remove {device.device_id} from registry?", default=False):
                 console.print(f"[green]✓ Device {device.device_id} removed[/green]")
                 break
+
+
+def batch_operations_menu(device):
+    """Show batch operations menu for device."""
+    while True:
+        console.clear()
+        console.print(Panel.fit(
+            f"[bold cyan]Batch Operations: {device.device_id}[/bold cyan]\n"
+            f"[dim]Address: {device.address}[/dim]",
+            border_style="cyan"
+        ))
+        
+        console.print("\n[bold cyan]Batch Operations:[/bold cyan]")
+        console.print("  [1] Custom command")
+        console.print("  [2] System upgrade")
+        console.print("  [3] Install package")
+        console.print("  [4] Service management")
+        console.print("  [5] File transfer")
+        console.print("  [b] Back to device menu")
+        
+        choice = Prompt.ask(
+            "\n[cyan]Choose an option[/cyan]",
+            choices=["1", "2", "3", "4", "5", "b"],
+            default="b"
+        )
+        
+        if choice == "b":
+            break
+        elif choice == "1":
+            # Custom command
+            command = Prompt.ask("Enter command to execute")
+            if command:
+                console.print(f"\n[yellow]→ Executing: {command}[/yellow]")
+                try:
+                    if "@" in device.address:
+                        target = device.address
+                    else:
+                        target = f"pi@{device.address}"
+                    
+                    from .cli import cmd_ssh_batch
+                    cmd_ssh_batch(command=command, target=target, parallel=False)
+                except Exception as e:
+                    console.print(f"[red]✗ Command failed: {e}[/red]")
+            
+            Prompt.ask("\nPress Enter to continue...")
+            
+        elif choice == "2":
+            # System upgrade
+            console.print(f"\n[yellow]→ System upgrade on {device.device_id}[/yellow]")
+            if Confirm.ask("Upgrade all packages on this device?", default=False):
+                try:
+                    if "@" in device.address:
+                        target = device.address
+                    else:
+                        target = f"pi@{device.address}"
+                    
+                    from .cli import cmd_ssh_system_upgrade
+                    cmd_ssh_system_upgrade(target=target, parallel=False)
+                except Exception as e:
+                    console.print(f"[red]✗ System upgrade failed: {e}[/red]")
+            
+            Prompt.ask("\nPress Enter to continue...")
+            
+        elif choice == "3":
+            # Install package
+            package = Prompt.ask("Enter package name to install")
+            if package:
+                console.print(f"\n[yellow]→ Installing {package}[/yellow]")
+                try:
+                    if "@" in device.address:
+                        target = device.address
+                    else:
+                        target = f"pi@{device.address}"
+                    
+                    from .cli import cmd_ssh_batch
+                    cmd_ssh_batch(command=f"sudo apt install -y {package}", target=target, parallel=False)
+                except Exception as e:
+                    console.print(f"[red]✗ Package installation failed: {e}[/red]")
+            
+            Prompt.ask("\nPress Enter to continue...")
+            
+        elif choice == "4":
+            # Service management
+            service_menu(device)
+            
+        elif choice == "5":
+            # File transfer
+            file_transfer_menu(device)
+
+
+def service_menu(device):
+    """Service management menu."""
+    while True:
+        console.clear()
+        console.print(Panel.fit(
+            f"[bold cyan]Service Management: {device.device_id}[/bold cyan]\n"
+            f"[dim]Address: {device.address}[/dim]",
+            border_style="cyan"
+        ))
+        
+        console.print("\n[bold cyan]Service Operations:[/bold cyan]")
+        console.print("  [1] List services")
+        console.print("  [2] Check service status")
+        console.print("  [3] Start service")
+        console.print("  [4] Stop service")
+        console.print("  [5] Restart service")
+        console.print("  [6] Enable service")
+        console.print("  [7] Disable service")
+        console.print("  [b] Back to batch operations")
+        
+        choice = Prompt.ask(
+            "\n[cyan]Choose an option[/cyan]",
+            choices=["1", "2", "3", "4", "5", "6", "7", "b"],
+            default="b"
+        )
+        
+        if choice == "b":
+            break
+        elif choice == "1":
+            # List services
+            console.print("\n[yellow]→ Listing services...[/yellow]")
+            try:
+                if "@" in device.address:
+                    target = device.address
+                else:
+                    target = f"pi@{device.address}"
+                
+                from .cli import cmd_ssh_batch
+                cmd_ssh_batch(command="systemctl list-units --type=service --state=running", target=target, parallel=False)
+            except Exception as e:
+                console.print(f"[red]✗ Failed to list services: {e}[/red]")
+            
+            Prompt.ask("\nPress Enter to continue...")
+            
+        elif choice in ["2", "3", "4", "5", "6", "7"]:
+            # Service operations
+            if choice in ["2", "3", "4", "5"]:
+                service_name = Prompt.ask("Enter service name")
+            else:
+                service_name = Prompt.ask("Enter service name to enable/disable")
+            
+            if service_name:
+                commands = {
+                    "2": f"systemctl status {service_name}",
+                    "3": f"sudo systemctl start {service_name}",
+                    "4": f"sudo systemctl stop {service_name}",
+                    "5": f"sudo systemctl restart {service_name}",
+                    "6": f"sudo systemctl enable {service_name}",
+                    "7": f"sudo systemctl disable {service_name}",
+                }
+                
+                action = {
+                    "2": "checking status",
+                    "3": "starting",
+                    "4": "stopping", 
+                    "5": "restarting",
+                    "6": "enabling",
+                    "7": "disabling"
+                }
+                
+                console.print(f"\n[yellow]→ {action[choice].capitalize()} {service_name}...[/yellow]")
+                try:
+                    if "@" in device.address:
+                        target = device.address
+                    else:
+                        target = f"pi@{device.address}"
+                    
+                    from .cli import cmd_ssh_batch
+                    cmd_ssh_batch(command=commands[choice], target=target, parallel=False)
+                except Exception as e:
+                    console.print(f"[red]✗ Service operation failed: {e}[/red]")
+            
+            Prompt.ask("\nPress Enter to continue...")
+
+
+def file_transfer_menu(device):
+    """File transfer menu."""
+    while True:
+        console.clear()
+        console.print(Panel.fit(
+            f"[bold cyan]File Transfer: {device.device_id}[/bold cyan]\n"
+            f"[dim]Address: {device.address}[/dim]",
+            border_style="cyan"
+        ))
+        
+        console.print("\n[bold cyan]File Operations:[/bold cyan]")
+        console.print("  [1] Upload file")
+        console.print("  [2] Download file")
+        console.print("  [3] List remote directory")
+        console.print("  [4] Create remote directory")
+        console.print("  [b] Back to batch operations")
+        
+        choice = Prompt.ask(
+            "\n[cyan]Choose an option[/cyan]",
+            choices=["1", "2", "3", "4", "b"],
+            default="b"
+        )
+        
+        if choice == "b":
+            break
+        elif choice == "1":
+            # Upload file
+            local_path = Prompt.ask("Enter local file path")
+            remote_path = Prompt.ask("Enter remote file path")
+            
+            if local_path and remote_path:
+                console.print(f"\n[yellow]→ Uploading {local_path} to {remote_path}[/yellow]")
+                try:
+                    if "@" in device.address:
+                        target = device.address
+                    else:
+                        target = f"pi@{device.address}"
+                    
+                    from .cli import cmd_ssh_transfer
+                    cmd_ssh_transfer(local_path=local_path, remote_path=remote_path, target=target)
+                except Exception as e:
+                    console.print(f"[red]✗ File upload failed: {e}[/red]")
+            
+            Prompt.ask("\nPress Enter to continue...")
+            
+        elif choice == "2":
+            # Download file
+            remote_path = Prompt.ask("Enter remote file path")
+            local_path = Prompt.ask("Enter local file path")
+            
+            if remote_path and local_path:
+                console.print(f"\n[yellow]→ Downloading {remote_path} to {local_path}[/yellow]")
+                try:
+                    if "@" in device.address:
+                        target = device.address
+                    else:
+                        target = f"pi@{device.address}"
+                    
+                    from .cli import cmd_ssh_transfer
+                    cmd_ssh_transfer(local_path=local_path, remote_path=remote_path, target=target, download=True)
+                except Exception as e:
+                    console.print(f"[red]✗ File download failed: {e}[/red]")
+            
+            Prompt.ask("\nPress Enter to continue...")
+            
+        elif choice == "3":
+            # List remote directory
+            remote_path = Prompt.ask("Enter remote directory path", default="/home/pi")
+            
+            if remote_path:
+                console.print(f"\n[yellow]→ Listing {remote_path}[/yellow]")
+                try:
+                    if "@" in device.address:
+                        target = device.address
+                    else:
+                        target = f"pi@{device.address}"
+                    
+                    from .cli import cmd_ssh_batch
+                    cmd_ssh_batch(command=f"ls -la {remote_path}", target=target, parallel=False)
+                except Exception as e:
+                    console.print(f"[red]✗ Directory listing failed: {e}[/red]")
+            
+            Prompt.ask("\nPress Enter to continue...")
+            
+        elif choice == "4":
+            # Create remote directory
+            remote_path = Prompt.ask("Enter remote directory path to create")
+            
+            if remote_path:
+                console.print(f"\n[yellow]→ Creating directory {remote_path}[/yellow]")
+                try:
+                    if "@" in device.address:
+                        target = device.address
+                    else:
+                        target = f"pi@{device.address}"
+                    
+                    from .cli import cmd_ssh_batch
+                    cmd_ssh_batch(command=f"mkdir -p {remote_path}", target=target, parallel=False)
+                except Exception as e:
+                    console.print(f"[red]✗ Directory creation failed: {e}[/red]")
+            
+            Prompt.ask("\nPress Enter to continue...")
 
 
 def open_ssh_shell(target: str):
