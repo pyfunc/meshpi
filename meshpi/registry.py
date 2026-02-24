@@ -23,6 +23,10 @@ REGISTRY_PATH = Path.home() / ".meshpi" / "registry.json"
 class DeviceRecord:
     device_id: str               # hostname or generated UUID
     address: str                 # last seen IP
+    host: str = ""              # hostname for SSH connection
+    user: str = "pi"            # SSH username
+    port: int = 22               # SSH port
+    meshpi_port: int = 7422      # MeshPi service port
     first_seen: float = field(default_factory=time.time)
     last_seen: float = field(default_factory=time.time)
     last_diagnostics: dict = field(default_factory=dict)
@@ -61,6 +65,30 @@ class DeviceRegistry:
         REGISTRY_PATH.parent.mkdir(parents=True, exist_ok=True)
         data = {dev_id: rec.to_dict() for dev_id, rec in self._devices.items()}
         REGISTRY_PATH.write_text(json.dumps(data, indent=2))
+
+    def register_device(self, device_id: str, address: str, host: str = "", user: str = "pi", port: int = 22) -> DeviceRecord:
+        """Register a new device with full connection details."""
+        with self._lock:
+            if device_id in self._devices:
+                rec = self._devices[device_id]
+                rec.address = address
+                rec.host = host or address
+                rec.user = user
+                rec.port = port
+                rec.last_seen = time.time()
+                rec.online = True
+            else:
+                rec = DeviceRecord(
+                    device_id=device_id, 
+                    address=address, 
+                    host=host or address,
+                    user=user,
+                    port=port,
+                    online=True
+                )
+                self._devices[device_id] = rec
+            self._save()
+            return rec
 
     def register(self, device_id: str, address: str) -> DeviceRecord:
         with self._lock:

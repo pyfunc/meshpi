@@ -1,3 +1,28 @@
+## [0.1.20] - 2026-02-24
+
+### Summary
+
+feat(tests): CLI interface improvements
+
+### Docs
+
+- docs: update RPI-TESTING-README.md
+
+### Test
+
+- scripts: update test-ssh-host.sh
+
+### Build
+
+- update pyproject.toml
+
+### Other
+
+- update =5.9
+- update meshpi/cli.py
+- update meshpi/registry.py
+
+
 ## [0.1.19] - 2026-02-24
 
 ### Summary

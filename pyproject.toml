@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "meshpi"
-version = "0.1.19"
+version = "0.1.20"
 description = "🚀 Zero-touch provisioning for Raspberry Pi fleets - Configure WiFi, SSH, users, hardware peripherals, and manage devices through encrypted mesh networking"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -68,6 +68,7 @@ dependencies = [
     "pydantic>=2.5",
     "uvicorn>=0.27",
     "fastapi>=0.109",
+    "psutil>=5.9",
 ]
 
 [project.optional-dependencies]

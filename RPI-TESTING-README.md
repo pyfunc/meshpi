@@ -36,6 +36,9 @@ meshpi ls
 # Comprehensive service management
 ./rpi-service-manager.sh pi@192.168.188.148
 
+# Start host service on remote RPi via SSH
+meshpi host --ssh pi@192.168.188.148
+
 # Local diagnostics only
 meshpi doctor --local
 ```
@@ -68,9 +71,11 @@ meshpi doctor --local
 - `monitor-repair.sh` - RPi-side repair status monitor
 - `show-repair-status.sh` - Visual repair status display
 - `rpi-service-manager.sh` - Comprehensive service management
+- `meshpi/ssh_manager.py` - SSH device management system
 - `test-doctor.sh` - Test script for doctor functionality
 - `test-restart.sh` - Test script for restart functionality
 - `test-list.sh` - Test script for list functionality
+- `test-ssh-host.sh` - Test script for SSH host functionality
 - `.github/workflows/test-rpi-arch.yml` - CI/CD workflow
 - `docs/RPI-TESTING.md` - Comprehensive testing guide
 - `docs/RPI-TEST-RESULTS.md` - Test results and known issues
@@ -156,6 +161,15 @@ meshpi ls --all
 ./rpi-service-manager.sh pi@192.168.188.148 stop
 ./rpi-service-manager.sh pi@192.168.188.148 restart
 ./rpi-service-manager.sh pi@192.168.188.148 status
+
+# Start host service on remote RPi via SSH
+meshpi host --ssh pi@192.168.188.148
+
+# SSH host management
+meshpi host --ssh pi@192.168.188.148 --agent
+meshpi host --ssh pi@192.168.188.148 --port 8080
+meshpi host --ssh pi@192.168.188.148 --ssh-key ~/.ssh/key
+meshpi host --ssh pi@192.168.188.148 --ssh-password
 
 # Local diagnostics only
 meshpi doctor --local
