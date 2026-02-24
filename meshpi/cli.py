@@ -93,8 +93,135 @@ from rich.text import Text
 from rich.columns import Columns
 from rich.layout import Layout
 from rich.align import Align
+import sys
+import tty
+import termios
 
 console = Console()
+
+def get_key():
+    """Get a single keypress from the user."""
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    try:
+        tty.setraw(sys.stdin.fileno())
+        ch = sys.stdin.read(1)
+        if ch == '\x1b':  # Escape sequence
+            # Read the next two characters to determine arrow key
+            ch1 = sys.stdin.read(1)
+            ch2 = sys.stdin.read(1)
+            if ch1 == '[':
+                if ch2 == 'A':
+                    return 'up'
+                elif ch2 == 'B':
+                    return 'down'
+                elif ch2 == 'C':
+                    return 'right'
+                elif ch2 == 'D':
+                    return 'left'
+        return ch
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+def interactive_device_selection(devices: List, all_devices: bool = False):
+    """Interactive device selection with arrow keys."""
+    if not devices:
+        return None
+    
+    selected_index = 0
+    selected_devices = []  # For multi-selection
+    
+    while True:
+        console.clear()
+        console.print(Panel.fit(
+            "[bold cyan]MeshPi Device Manager[/bold cyan]\n"
+            "[dim]Use ↑↓ to navigate, SPACE to select, ENTER to confirm, q to quit[/dim]",
+            border_style="cyan"
+        ))
+        
+        # Create device table
+        table = Table(show_header=True, header_style="bold cyan", border_style="cyan")
+        table.add_column("Sel", style="bold", width=4)
+        table.add_column("Device ID", style="bold")
+        table.add_column("Status", width=8)
+        table.add_column("Address", style="dim")
+        table.add_column("Last Seen", style="dim")
+        table.add_column("Profiles", style="dim")
+        
+        # Filter devices
+        visible_devices = devices if all_devices else [d for d in devices if d.online]
+        
+        for i, device in enumerate(visible_devices):
+            # Selection indicator
+            if i == selected_index:
+                sel_marker = "→"
+                row_style = "on cyan"
+            else:
+                sel_marker = " "
+                row_style = ""
+            
+            # Multi-selection marker
+            multi_marker = "✓" if device in selected_devices else " "
+            
+            status = "[green]ONLINE[/green]" if device.online else "[red]OFFLINE[/red]"
+            last_seen = time.strftime("%H:%M", time.localtime(device.last_seen)) if device.last_seen else "Never"
+            profiles = ", ".join(device.applied_profiles[:2]) if device.applied_profiles else "None"
+            if len(device.applied_profiles) > 2:
+                profiles += f" (+{len(device.applied_profiles)-2})"
+            
+            if row_style:
+                table.add_row(f"{multi_marker}{sel_marker}", device.device_id, status, device.address, last_seen, profiles, style=row_style)
+            else:
+                table.add_row(f"{multi_marker}{sel_marker}", device.device_id, status, device.address, last_seen, profiles)
+        
+        console.print(table)
+        
+        # Show multi-selection info
+        if selected_devices:
+            console.print(f"\n[dim]Selected: {len(selected_devices)} device(s)[/dim]")
+        
+        # Show help
+        console.print("\n[bold cyan]Controls:[/bold cyan]")
+        console.print("  ↑↓ Navigate | SPACE Select | ENTER Confirm | q Quit | a Toggle all")
+        
+        # Get user input
+        key = get_key()
+        
+        if key == 'q':
+            return None
+        elif key == 'up':
+            selected_index = max(0, selected_index - 1)
+        elif key == 'down':
+            selected_index = min(len(visible_devices) - 1, selected_index + 1)
+        elif key == ' ':
+            # Toggle selection
+            device = visible_devices[selected_index]
+            if device in selected_devices:
+                selected_devices.remove(device)
+            else:
+                selected_devices.append(device)
+        elif key == '\r' or key == '\n':
+            # Confirm selection
+            if selected_devices:
+                return selected_devices
+            else:
+                return [visible_devices[selected_index]]
+        elif key == 'a':
+            # Toggle all selection
+            if selected_devices == visible_devices:
+                selected_devices = []
+            else:
+                selected_devices = visible_devices.copy()
+
+def enhanced_device_menu(devices: List):
+    """Enhanced device menu for single or multiple devices."""
+    if len(devices) == 1:
+        # Single device menu
+        device = devices[0]
+        device_menu(device)
+    else:
+        # Multi-device menu
+        multi_device_menu(devices)
 
 LOGO = """\
 [bold cyan]
@@ -526,6 +653,146 @@ def cmd_hw_list(category, tag):
     console.print(f"\n[dim]{len(profiles)} profiles[/dim]")
 
 
+@cmd_hw.command("search")
+@click.argument("query", default="")
+@click.option("--category", "-c", default=None,
+              help="Filter by category: display|gpio|sensor|camera|audio|networking|hat|storage")
+@click.option("--tag", "-t", default=None, help="Filter by tag (e.g. 'i2c', 'spi', 'oled')")
+@click.option("--installed", is_flag=True, default=False, help="Show only installed profiles")
+@click.option("--interactive", "-i", is_flag=True, default=False, help="Interactive selection and install")
+def cmd_hw_search(query: str, category: str, tag: str, installed: bool, interactive: bool):
+    """Search hardware profiles with advanced filtering and interactive installation."""
+    from .hardware.profiles import list_profiles, get_profile
+    from .hardware.applier import apply_multiple_profiles
+    from rich.prompt import Confirm
+    
+    profiles = list_profiles(category=category, tag=tag)
+    
+    # Filter by query
+    if query:
+        query_lower = query.lower()
+        profiles = [p for p in profiles if 
+                   query_lower in p.name.lower() or 
+                   query_lower in p.description.lower() or 
+                   query_lower in p.id.lower()]
+    
+    if not profiles:
+        console.print("[yellow]No profiles found matching your criteria.[/yellow]")
+        return
+    
+    if interactive:
+        # Interactive selection mode
+        selected_profiles = interactive_profile_selection(profiles)
+        if selected_profiles:
+            console.print(f"\n[cyan]Installing {len(selected_profiles)} selected profiles...[/cyan]")
+            apply_multiple_profiles(selected_profiles)
+        else:
+            console.print("[yellow]No profiles selected.[/yellow]")
+    else:
+        # Display results
+        table = Table(title=f"Hardware Profiles ({len(profiles)} found)", border_style="cyan")
+        table.add_column("ID", style="bold cyan", no_wrap=True)
+        table.add_column("Category", style="dim")
+        table.add_column("Name")
+        table.add_column("Description", style="dim")
+        table.add_column("Tags", style="dim")
+        
+        for p in profiles:
+            table.add_row(
+                p.id, 
+                p.category, 
+                p.name, 
+                p.description[:60] + "..." if len(p.description) > 60 else p.description,
+                ", ".join(p.tags[:3])
+            )
+        
+        console.print(table)
+        console.print(f"\n[dim]Use --interactive to select and install, or 'meshpi hw apply <id>' to install specific profile[/dim]")
+
+
+def interactive_profile_selection(profiles):
+    """Interactive profile selection with arrow keys."""
+    if not profiles:
+        return []
+    
+    selected_index = 0
+    selected_profiles = []
+    
+    while True:
+        console.clear()
+        console.print(Panel.fit(
+            "[bold cyan]Select Hardware Profiles[/bold cyan]\n"
+            "[dim]Use ↑↓ to navigate, SPACE to select, ENTER to confirm, q to quit[/dim]",
+            border_style="cyan"
+        ))
+        
+        # Create profile table
+        table = Table(show_header=True, header_style="bold cyan", border_style="cyan")
+        table.add_column("Sel", style="bold", width=4)
+        table.add_column("ID", style="bold cyan")
+        table.add_column("Category", style="dim")
+        table.add_column("Name")
+        table.add_column("Tags", style="dim")
+        
+        for i, profile in enumerate(profiles):
+            if i == selected_index:
+                sel_marker = "→"
+                row_style = "on cyan"
+            else:
+                sel_marker = " "
+                row_style = ""
+            
+            multi_marker = "✓" if profile in selected_profiles else " "
+            
+            if row_style:
+                table.add_row(
+                    f"{multi_marker}{sel_marker}", 
+                    profile.id, 
+                    profile.category, 
+                    profile.name, 
+                    ", ".join(profile.tags[:2]), 
+                    style=row_style
+                )
+            else:
+                table.add_row(
+                    f"{multi_marker}{sel_marker}", 
+                    profile.id, 
+                    profile.category, 
+                    profile.name, 
+                    ", ".join(profile.tags[:2])
+                )
+        
+        console.print(table)
+        
+        if selected_profiles:
+            console.print(f"\n[dim]Selected: {len(selected_profiles)} profile(s)[/dim]")
+        
+        console.print("\n[bold cyan]Controls:[/bold cyan]")
+        console.print("  ↑↓ Navigate | SPACE Select | ENTER Confirm | q Quit | a Toggle all")
+        
+        key = get_key()
+        
+        if key == 'q':
+            return []
+        elif key == 'up':
+            selected_index = max(0, selected_index - 1)
+        elif key == 'down':
+            selected_index = min(len(profiles) - 1, selected_index + 1)
+        elif key == ' ':
+            profile = profiles[selected_index]
+            if profile in selected_profiles:
+                selected_profiles.remove(profile)
+            else:
+                selected_profiles.append(profile)
+        elif key == '\r' or key == '\n':
+            return selected_profiles
+        elif key == 'a':
+            if selected_profiles == profiles:
+                selected_profiles = []
+            else:
+                selected_profiles = profiles.copy()
+
+
 @cmd_hw.command("show")
 @click.argument("profile_id")
 def cmd_hw_show(profile_id: str):
@@ -558,25 +825,195 @@ def cmd_hw_show(profile_id: str):
             console.print(f"  [dim]$[/dim] {cmd}")
 
 
+@cmd_hw.command("create")
+@click.option("--interactive", "-i", is_flag=True, default=True, help="Interactive profile creation")
+@click.option("--import-file", "-f", default=None, help="Import profile from YAML/JSON file")
+@click.option("--name", default=None, help="Profile name")
+@click.option("--category", default=None, help="Profile category")
+@click.option("--description", default=None, help="Profile description")
+@click.option("--packages", default=None, help="Comma-separated apt packages")
+@click.option("--python-packages", default=None, help="Comma-separated pip packages")
+@click.option("--tags", default=None, help="Comma-separated tags")
+def cmd_hw_create(interactive: bool, import_file: str, name: str, category: str, 
+                  description: str, packages: str, python_packages: str, tags: str):
+    """
+    \b
+    Create custom hardware profiles.
+
+    Examples:
+      meshpi hw create --interactive
+      meshpi hw create --import-file my_profile.yaml
+      meshpi hw create --name "My Sensor" --category sensor --packages "i2c-tools,python3-smbus"
+    """
+    from .hardware.custom import (
+        create_custom_profile_interactive,
+        import_profile_from_file,
+        save_custom_profiles,
+        load_custom_profiles
+    )
+    from .hardware.profiles import HardwareProfile
+    
+    if import_file:
+        # Import from file
+        profile = import_profile_from_file(import_file)
+        if profile:
+            custom_profiles = load_custom_profiles()
+            custom_profiles[profile.id] = profile
+            if save_custom_profiles(custom_profiles):
+                console.print(f"[green]✓ Profile '{profile.id}' imported successfully[/green]")
+            else:
+                console.print(f"[red]✗ Failed to save imported profile[/red]")
+        return
+    
+    if interactive or not all([name, category, description]):
+        # Interactive creation
+        profile = create_custom_profile_interactive()
+        if profile:
+            custom_profiles = load_custom_profiles()
+            custom_profiles[profile.id] = profile
+            if save_custom_profiles(custom_profiles):
+                console.print(f"[green]✓ Custom profile '{profile.id}' created successfully[/green]")
+                console.print(f"[dim]Use: meshpi hw apply {profile.id}[/dim]")
+            else:
+                console.print(f"[red]✗ Failed to save custom profile[/red]")
+        return
+    
+    # Quick creation from command line
+    profile_id = name.lower().replace(' ', '_').replace('-', '_')
+    
+    pkg_list = [p.strip() for p in packages.split(',')] if packages else []
+    py_pkg_list = [p.strip() for p in python_packages.split(',')] if python_packages else []
+    tag_list = [t.strip() for t in tags.split(',')] if tags else []
+    
+    post_commands = []
+    if py_pkg_list:
+        post_commands.append(f"pip3 install {' '.join(py_pkg_list)}")
+    
+    profile = HardwareProfile(
+        id=profile_id,
+        name=name,
+        category=category,
+        description=description,
+        packages=pkg_list,
+        post_commands=post_commands,
+        tags=tag_list
+    )
+    
+    custom_profiles = load_custom_profiles()
+    custom_profiles[profile.id] = profile
+    
+    if save_custom_profiles(custom_profiles):
+        console.print(f"[green]✓ Custom profile '{profile.id}' created successfully[/green]")
+        console.print(f"[dim]Use: meshpi hw apply {profile.id}[/dim]")
+    else:
+        console.print(f"[red]✗ Failed to save custom profile[/red]")
+
+
+@cmd_hw.command("custom")
+def cmd_hw_custom():
+    """Manage custom hardware profiles."""
+    from .hardware.custom import list_custom_profiles
+    list_custom_profiles()
+
+
+@cmd_hw.command("export")
+@click.argument("profile_id")
+@click.argument("file_path")
+@click.option("--format", "-f", default="yaml", help="Export format: yaml or json")
+def cmd_hw_export(profile_id: str, file_path: str, format: str):
+    """Export a hardware profile to file."""
+    from .hardware.custom import export_profile_to_file
+    from .hardware.custom import get_all_profiles
+    
+    all_profiles = get_all_profiles()
+    
+    if profile_id not in all_profiles:
+        console.print(f"[red]Profile '{profile_id}' not found.[/red]")
+        return
+    
+    # Ensure file has correct extension
+    if not file_path.endswith(('.' + format)):
+        file_path += f'.{format}'
+    
+    profile = all_profiles[profile_id]
+    if export_profile_to_file(profile, file_path):
+        console.print(f"[green]✓ Profile '{profile_id}' exported to {file_path}[/green]")
+    else:
+        console.print(f"[red]✗ Failed to export profile[/red]")
+
+
+@cmd_hw.command("delete")
+@click.argument("profile_id")
+@click.option("--confirm", is_flag=True, default=False, help="Skip confirmation prompt")
+def cmd_hw_delete(profile_id: str, confirm: bool):
+    """Delete a custom hardware profile."""
+    from .hardware.custom import delete_custom_profile
+    
+    if confirm:
+        if delete_custom_profile(profile_id):
+            console.print(f"[green]✓ Custom profile '{profile_id}' deleted[/green]")
+        else:
+            console.print(f"[red]✗ Failed to delete profile[/red]")
+    else:
+        if delete_custom_profile(profile_id):
+            console.print(f"[green]✓ Custom profile '{profile_id}' deleted[/green]")
+        else:
+            console.print(f"[red]✗ Failed to delete profile[/red]")
+
+
 @cmd_hw.command("apply")
-@click.argument("profile_ids", nargs=-1, required=True)
+@click.argument("profile_ids", nargs=-1, required=False)
 @click.option("--dry-run", is_flag=True, default=False)
-def cmd_hw_apply(profile_ids: tuple, dry_run: bool):
+@click.option("--interactive", "-i", is_flag=True, default=False, help="Interactive profile selection")
+@click.option("--search", "-s", default=None, help="Search profiles before selection")
+def cmd_hw_apply(profile_ids: tuple, dry_run: bool, interactive: bool, search: str):
     """
     \b
     Apply one or more hardware profiles to this RPi.
 
-    Example:
+    Examples:
       meshpi hw apply oled_ssd1306_i2c sensor_bme280
+      meshpi hw apply --interactive
+      meshpi hw apply --search oled --interactive
+      meshpi hw apply --dry-run oled_ssd1306_i2c
     """
+    from .hardware.profiles import list_profiles, get_profile
+    from .hardware.custom import get_all_profiles
     from .hardware.applier import apply_multiple_profiles
+    
+    # Interactive mode or search mode
+    if interactive or search:
+        profiles = list(get_all_profiles().values())
+        
+        # Filter by search query if provided
+        if search:
+            search_lower = search.lower()
+            profiles = [p for p in profiles if 
+                       search_lower in p.name.lower() or 
+                       search_lower in p.description.lower() or 
+                       search_lower in p.id.lower()]
+        
+        if not profiles:
+            console.print("[yellow]No profiles found.[/yellow]")
+            return
+        
+        selected = interactive_profile_selection(profiles)
+        if selected:
+            profile_ids = tuple(p.id for p in selected)
+        else:
+            console.print("[yellow]No profiles selected.[/yellow]")
+            return
+    
+    if not profile_ids:
+        console.print("[red]No profiles specified. Use --interactive or provide profile IDs.[/red]")
+        return
 
     if dry_run:
-        from .hardware.profiles import get_profile
         console.print("[yellow]Dry-run: showing what would be installed[/yellow]")
+        all_profiles = get_all_profiles()
         for pid in profile_ids:
             try:
-                p = get_profile(pid)
+                p = all_profiles[pid]
                 console.print(f"\n[bold]{p.name}[/bold]")
                 if p.packages:      console.print(f"  apt: {', '.join(p.packages)}")
                 if p.overlays:      console.print(f"  overlays: {', '.join(p.overlays)}")
@@ -1080,6 +1517,85 @@ def cmd_monitor(group: Optional[str], interval: int, continuous: bool):
             console.print("\n[yellow]Monitoring stopped[/yellow]")
 
 
+def get_detailed_device_info(device) -> dict:
+    """Get detailed information about a device."""
+    from .ssh_manager import SSHManager
+    
+    info = {
+        "model": "Unknown",
+        "hostname": "Unknown", 
+        "architecture": "Unknown",
+        "meshpi_status": "Unknown",
+        "cpu_temp": "Unknown",
+        "memory": "Unknown",
+        "uptime": "Unknown"
+    }
+    
+    try:
+        manager = SSHManager()
+        if manager.connect_to_device(device):
+            device_info = manager.get_device_info(device)
+            
+            # Extract and format information
+            info["hostname"] = device_info.get("hostname", "Unknown")
+            info["architecture"] = device_info.get("architecture", "Unknown")
+            info["cpu_temp"] = device_info.get("cpu_temp", "Unknown")
+            info["memory"] = device_info.get("memory", "Unknown")
+            info["uptime"] = device_info.get("uptime", "Unknown")
+            
+            # Check MeshPi status
+            meshpi_version = device_info.get("meshpi_version", "N/A")
+            if meshpi_version != "N/A" and "not installed" not in meshpi_version:
+                info["meshpi_status"] = f"[green]{meshpi_version}[/green]"
+            else:
+                info["meshpi_status"] = "[red]Not installed[/red]"
+            
+            # Try to get model information
+            exit_code, stdout, stderr = manager.run_command_on_device(device, "cat /proc/device-tree/model 2>/dev/null || echo 'Unknown'")
+            if exit_code == 0 and stdout.strip():
+                model = stdout.strip()
+                if "raspberry pi" in model.lower():
+                    info["model"] = model
+                else:
+                    info["model"] = f"{model} (Non-RPi)"
+            
+            manager.disconnect_device(device)
+            
+    except Exception as e:
+        console.print(f"[dim]  Could not get detailed info for {device}: {e}[/dim]")
+    
+    return info
+
+
+def identify_device_type_quick(device) -> str:
+    """Quick device type identification for basic SSH scan."""
+    from .ssh_manager import SSHManager
+    
+    try:
+        manager = SSHManager()
+        if manager.connect_to_device(device):
+            # Quick checks for device type
+            checks = [
+                ("Raspberry Pi", "cat /proc/device-tree/model 2>/dev/null | grep -i raspberry"),
+                ("Router/Gateway", "ip route show default | grep -q 'via.*192.168.188.1'"),
+                ("Linux", "uname -s | grep -q Linux"),
+                ("ARM", "uname -m | grep -q arm")
+            ]
+            
+            for device_type, cmd in checks:
+                exit_code, _, _ = manager.run_command_on_device(device, cmd)
+                if exit_code == 0:
+                    manager.disconnect_device(device)
+                    return device_type
+            
+            manager.disconnect_device(device)
+            
+    except Exception:
+        pass
+    
+    return "Unknown"
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # meshpi ssh
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1091,15 +1607,102 @@ def cmd_ssh():
 
 
 @cmd_ssh.command("scan")
-@click.option("--network", default="192.168.1.0/24", help="Network range to scan")
+@click.option("--network", default=None, help="Network range to scan (auto-detects if not specified)")
 @click.option("--user", default="pi", help="Default SSH username")
 @click.option("--port", default=22, help="SSH port")
 @click.option("--timeout", default=5, help="Connection timeout")
 @click.option("--add", is_flag=True, default=False, help="Add discovered devices to management")
-def cmd_ssh_scan(network: str, user: str, port: int, timeout: int, add: bool):
-    """Scan network for SSH-enabled Raspberry Pi devices."""
+@click.option("--identify", is_flag=True, default=True, help="Identify device types and collect metadata")
+@click.option("--no-identify", is_flag=True, default=False, help="Disable device identification (basic SSH scan only)")
+def cmd_ssh_scan(network: Optional[str], user: str, port: int, timeout: int, add: bool, identify: bool, no_identify: bool):
+    """Scan network for SSH-enabled Raspberry Pi devices with device identification."""
     from .ssh_manager import SSHManager
     
+    # Handle --no-identify flag
+    if no_identify:
+        identify = False
+    
+    # Auto-detect network if not specified
+    if network is None:
+        try:
+            # Get local IP by connecting to a remote address
+            import socket
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                s.connect(("8.8.8.8", 80))
+                local_ip = s.getsockname()[0]
+            
+            # Use conservative /24 approach for SSH scan
+            if '.' in local_ip and (local_ip.startswith('192.168.') or local_ip.startswith('10.') or local_ip.startswith('172.')):
+                parts = local_ip.split('.')
+                network = f"{parts[0]}.{parts[1]}.{parts[2]}.0/24"
+            else:
+                network = "192.168.1.0/24"  # fallback
+            
+            console.print(f"[dim]Auto-detected network: {network}[/dim]")
+        except:
+            network = "192.168.1.0/24"  # fallback
+    
+    if identify:
+        console.print("[bold cyan]→ Scanning for Raspberry Pi devices with identification...[/bold cyan]")
+        # Use enhanced auto-detection
+        discovered_devices = auto_detect_rpi_devices()
+        
+        if not discovered_devices:
+            console.print("[yellow]No Raspberry Pi devices found[/yellow]")
+            console.print("[dim]Falling back to basic SSH scan...[/dim]\n")
+            identify = False
+        else:
+            console.print(f"\n[green]✓ Found {len(discovered_devices)} Raspberry Pi device(s):[/green]")
+            
+            # Create detailed table with device information
+            table = Table(title="Discovered Raspberry Pi Devices", border_style="cyan")
+            table.add_column("Device ID", style="bold")
+            table.add_column("IP Address", style="dim")
+            table.add_column("Hostname", style="dim")
+            table.add_column("Model", style="dim")
+            table.add_column("Architecture", style="dim")
+            table.add_column("MeshPi", style="bold")
+            table.add_column("Status", style="bold")
+            
+            for device in discovered_devices:
+                # Get additional device info
+                device_info = get_detailed_device_info(device)
+                
+                model = device_info.get("model", "Unknown")
+                hostname = device_info.get("hostname", device.device_id)
+                arch = device_info.get("architecture", "Unknown")
+                meshpi_status = device_info.get("meshpi_status", "Unknown")
+                status = "[green]ONLINE[/green]" if device.online else "[red]OFFLINE[/red]"
+                
+                table.add_row(
+                    device.device_id,
+                    device.address,
+                    hostname,
+                    model,
+                    arch,
+                    meshpi_status,
+                    status
+                )
+            
+            console.print(table)
+            
+            if add and Confirm.ask(f"\nAdd {len(discovered_devices)} device(s) to management?", default=False):
+                from .registry import registry as reg
+                for device in discovered_devices:
+                    reg.register_device(
+                        device_id=device.device_id,
+                        address=device.address,
+                        host=device.host,
+                        user=device.user,
+                        port=device.port
+                    )
+                reg.save()
+                console.print(f"[green]✓ Added {len(discovered_devices)} devices to registry[/green]")
+            
+            return
+    
+    # Basic SSH scan (fallback or if identify=False)
+    console.print("[bold cyan]→ Basic SSH device scan...[/bold cyan]")
     manager = SSHManager()
     devices = manager.scan_network(network, user, port, timeout)
     
@@ -1113,9 +1716,12 @@ def cmd_ssh_scan(network: str, user: str, port: int, timeout: int, add: bool):
     table.add_column("Host", style="bold")
     table.add_column("User", style="dim")
     table.add_column("Port", style="dim")
+    table.add_column("Type", style="dim")
     
     for device in devices:
-        table.add_row(device.host, device.user, str(device.port))
+        # Try to identify device type
+        device_type = identify_device_type_quick(device)
+        table.add_row(device.host, device.user, str(device.port), device_type)
     
     console.print(table)
     
@@ -2148,6 +2754,302 @@ def cmd_group_exec(group_name: str, command: str, parallel: bool):
         manager.disconnect_device(device)
 
 
+@cmd_ssh.command("hw-search")
+@click.argument("query", default="")
+@click.option("--category", "-c", default=None,
+              help="Filter by category: display|gpio|sensor|camera|audio|networking|hat|storage")
+@click.option("--tag", "-t", default=None, help="Filter by tag (e.g. 'i2c', 'spi', 'oled')")
+@click.option("--target", help="Specific device (user@host:port)")
+@click.option("--parallel", is_flag=True, default=True, help="Run in parallel")
+def cmd_ssh_hw_search(query: str, category: str, tag: str, target: Optional[str], parallel: bool):
+    """Search hardware profiles on remote SSH device(s)."""
+    from .ssh_manager import SSHManager, parse_device_target
+    from pathlib import Path
+    
+    manager = SSHManager()
+    devices_file = Path.home() / ".meshpi" / "ssh_devices.json"
+    
+    if devices_file.exists():
+        manager.load_device_list(str(devices_file))
+    
+    if target:
+        user, host, port = parse_device_target(target)
+        device = SSHDevice(host, user, port)
+        manager.add_device(device)
+    
+    if not manager.devices:
+        console.print("[red]No devices available. Use 'meshpi ssh add' to add devices.[/red]")
+        return
+    
+    # Connect to devices
+    for device in manager.devices:
+        if not device._connected:
+            manager.connect_to_device(device)
+    
+    # Build search command
+    cmd_parts = ["meshpi", "hw", "search"]
+    if query:
+        cmd_parts.append(query)
+    if category:
+        cmd_parts.extend(["--category", category])
+    if tag:
+        cmd_parts.extend(["--tag", tag])
+    
+    search_cmd = " ".join(cmd_parts)
+    
+    console.print(f"[cyan]→[/cyan] Searching hardware profiles on devices...")
+    console.print(f"[dim]Command: {search_cmd}[/dim]")
+    
+    results = manager.run_command_on_all(search_cmd, parallel=parallel)
+    
+    for device, (exit_code, stdout, stderr) in results.items():
+        console.print(f"\n[bold]{device}:[/bold]")
+        if exit_code == 0:
+            console.print(stdout)
+        else:
+            console.print(f"[red]Error: {stderr}[/red]")
+    
+    # Disconnect
+    for device in manager.devices:
+        manager.disconnect_device(device)
+
+
+@cmd_ssh.command("hw-apply")
+@click.argument("profile_ids", nargs=-1, required=False)
+@click.option("--target", help="Specific device (user@host:port)")
+@click.option("--parallel", is_flag=True, default=True, help="Run in parallel")
+@click.option("--dry-run", is_flag=True, default=False, help="Show what would be installed")
+@click.option("--interactive", "-i", is_flag=True, default=False, help="Interactive profile selection")
+@click.option("--search", "-s", default=None, help="Search profiles before selection")
+def cmd_ssh_hw_apply(profile_ids: tuple, target: Optional[str], parallel: bool, dry_run: bool, interactive: bool, search: str):
+    """Apply hardware profiles on remote SSH device(s)."""
+    from .ssh_manager import SSHManager, parse_device_target
+    from pathlib import Path
+    
+    manager = SSHManager()
+    devices_file = Path.home() / ".meshpi" / "ssh_devices.json"
+    
+    if devices_file.exists():
+        manager.load_device_list(str(devices_file))
+    
+    if target:
+        user, host, port = parse_device_target(target)
+        device = SSHDevice(host, user, port)
+        manager.add_device(device)
+    
+    if not manager.devices:
+        console.print("[red]No devices available. Use 'meshpi ssh add' to add devices.[/red]")
+        return
+    
+    # Connect to devices
+    for device in manager.devices:
+        if not device._connected:
+            manager.connect_to_device(device)
+    
+    # Build apply command
+    cmd_parts = ["meshpi", "hw", "apply"]
+    if dry_run:
+        cmd_parts.append("--dry-run")
+    if interactive:
+        cmd_parts.append("--interactive")
+    if search:
+        cmd_parts.extend(["--search", search])
+    cmd_parts.extend(profile_ids)
+    
+    apply_cmd = " ".join(cmd_parts)
+    
+    console.print(f"[cyan]→[/cyan] Applying hardware profiles on devices...")
+    console.print(f"[dim]Command: {apply_cmd}[/dim]")
+    
+    results = manager.run_command_on_all(apply_cmd, parallel=parallel)
+    
+    for device, (exit_code, stdout, stderr) in results.items():
+        console.print(f"\n[bold]{device}:[/bold]")
+        if exit_code == 0:
+            console.print(stdout)
+        else:
+            console.print(f"[red]Error: {stderr}[/red]")
+    
+    # Disconnect
+    for device in manager.devices:
+        manager.disconnect_device(device)
+
+
+@cmd_ssh.command("hw-create")
+@click.option("--target", help="Specific device (user@host:port)")
+@click.option("--interactive", "-i", is_flag=True, default=True, help="Interactive profile creation")
+@click.option("--import-file", "-f", default=None, help="Import profile from YAML/JSON file")
+@click.option("--name", default=None, help="Profile name")
+@click.option("--category", default=None, help="Profile category")
+@click.option("--description", default=None, help="Profile description")
+@click.option("--packages", default=None, help="Comma-separated apt packages")
+@click.option("--python-packages", default=None, help="Comma-separated pip packages")
+@click.option("--tags", default=None, help="Comma-separated tags")
+def cmd_ssh_hw_create(target: Optional[str], interactive: bool, import_file: str, 
+                     name: str, category: str, description: str, packages: str, python_packages: str, tags: str):
+    """Create custom hardware profiles on remote SSH device(s)."""
+    from .ssh_manager import SSHManager, parse_device_target
+    from pathlib import Path
+    
+    manager = SSHManager()
+    devices_file = Path.home() / ".meshpi" / "ssh_devices.json"
+    
+    if devices_file.exists():
+        manager.load_device_list(str(devices_file))
+    
+    if target:
+        user, host, port = parse_device_target(target)
+        device = SSHDevice(host, user, port)
+        manager.add_device(device)
+    
+    if not manager.devices:
+        console.print("[red]No devices available. Use 'meshpi ssh add' to add devices.[/red]")
+        return
+    
+    # Connect to devices
+    for device in manager.devices:
+        if not device._connected:
+            manager.connect_to_device(device)
+    
+    # Build create command
+    cmd_parts = ["meshpi", "hw", "create"]
+    if interactive:
+        cmd_parts.append("--interactive")
+    if import_file:
+        cmd_parts.extend(["--import-file", import_file])
+    if name:
+        cmd_parts.extend(["--name", name])
+    if category:
+        cmd_parts.extend(["--category", category])
+    if description:
+        cmd_parts.extend(["--description", description])
+    if packages:
+        cmd_parts.extend(["--packages", packages])
+    if python_packages:
+        cmd_parts.extend(["--python-packages", python_packages])
+    if tags:
+        cmd_parts.extend(["--tags", tags])
+    
+    create_cmd = " ".join(cmd_parts)
+    
+    console.print(f"[cyan]→[/cyan] Creating custom hardware profiles on devices...")
+    console.print(f"[dim]Command: {create_cmd}[/dim]")
+    
+    results = manager.run_command_on_all(create_cmd, parallel=False)  # Sequential for interactive
+    
+    for device, (exit_code, stdout, stderr) in results.items():
+        console.print(f"\n[bold]{device}:[/bold]")
+        if exit_code == 0:
+            console.print(stdout)
+        else:
+            console.print(f"[red]Error: {stderr}[/red]")
+    
+    # Disconnect
+    for device in manager.devices:
+        manager.disconnect_device(device)
+
+
+@cmd_ssh.command("hw-custom")
+@click.option("--target", help="Specific device (user@host:port)")
+@click.option("--parallel", is_flag=True, default=True, help="Run in parallel")
+def cmd_ssh_hw_custom(target: Optional[str], parallel: bool):
+    """List custom hardware profiles on remote SSH device(s)."""
+    from .ssh_manager import SSHManager, parse_device_target
+    from pathlib import Path
+    
+    manager = SSHManager()
+    devices_file = Path.home() / ".meshpi" / "ssh_devices.json"
+    
+    if devices_file.exists():
+        manager.load_device_list(str(devices_file))
+    
+    if target:
+        user, host, port = parse_device_target(target)
+        device = SSHDevice(host, user, port)
+        manager.add_device(device)
+    
+    if not manager.devices:
+        console.print("[red]No devices available. Use 'meshpi ssh add' to add devices.[/red]")
+        return
+    
+    # Connect to devices
+    for device in manager.devices:
+        if not device._connected:
+            manager.connect_to_device(device)
+    
+    console.print(f"[cyan]→[/cyan] Listing custom hardware profiles on devices...")
+    
+    results = manager.run_command_on_all("meshpi hw custom", parallel=parallel)
+    
+    for device, (exit_code, stdout, stderr) in results.items():
+        console.print(f"\n[bold]{device}:[/bold]")
+        if exit_code == 0:
+            console.print(stdout)
+        else:
+            console.print(f"[red]Error: {stderr}[/red]")
+    
+    # Disconnect
+    for device in manager.devices:
+        manager.disconnect_device(device)
+
+
+@cmd_ssh.command("hw-list")
+@click.option("--category", "-c", default=None,
+              help="Filter by category: display|gpio|sensor|camera|audio|networking|hat|storage")
+@click.option("--tag", "-t", default=None, help="Filter by tag (e.g. 'i2c', 'spi', 'oled')")
+@click.option("--target", help="Specific device (user@host:port)")
+@click.option("--parallel", is_flag=True, default=True, help="Run in parallel")
+def cmd_ssh_hw_list(category: str, tag: str, target: Optional[str], parallel: bool):
+    """List hardware profiles on remote SSH device(s)."""
+    from .ssh_manager import SSHManager, parse_device_target
+    from pathlib import Path
+    
+    manager = SSHManager()
+    devices_file = Path.home() / ".meshpi" / "ssh_devices.json"
+    
+    if devices_file.exists():
+        manager.load_device_list(str(devices_file))
+    
+    if target:
+        user, host, port = parse_device_target(target)
+        device = SSHDevice(host, user, port)
+        manager.add_device(device)
+    
+    if not manager.devices:
+        console.print("[red]No devices available. Use 'meshpi ssh add' to add devices.[/red]")
+        return
+    
+    # Connect to devices
+    for device in manager.devices:
+        if not device._connected:
+            manager.connect_to_device(device)
+    
+    # Build list command
+    cmd_parts = ["meshpi", "hw", "list"]
+    if category:
+        cmd_parts.extend(["--category", category])
+    if tag:
+        cmd_parts.extend(["--tag", tag])
+    
+    list_cmd = " ".join(cmd_parts)
+    
+    console.print(f"[cyan]→[/cyan] Listing hardware profiles on devices...")
+    console.print(f"[dim]Command: {list_cmd}[/dim]")
+    
+    results = manager.run_command_on_all(list_cmd, parallel=parallel)
+    
+    for device, (exit_code, stdout, stderr) in results.items():
+        console.print(f"\n[bold]{device}:[/bold]")
+        if exit_code == 0:
+            console.print(stdout)
+        else:
+            console.print(f"[red]Error: {stderr}[/red]")
+    
+    # Disconnect
+    for device in manager.devices:
+        manager.disconnect_device(device)
+
+
 @cmd_ssh.command("transfer")
 @click.argument("local_path")
 @click.argument("remote_path")
@@ -2205,19 +3107,69 @@ def auto_detect_rpi_devices() -> list[DeviceRecord]:
     
     discovered = []
     
-    # Get local network range
+    # Get local network range - only scan the specific subnet the interface is connected to
     try:
-        # Get local IP by connecting to a remote address
+        # Get local IP and interface by connecting to a remote address
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.connect(("8.8.8.8", 80))
             local_ip = s.getsockname()[0]
         
-        # Determine network range (assuming /24)
-        if '.' in local_ip and local_ip.startswith('192.168.') or local_ip.startswith('10.') or local_ip.startswith('172.'):
-            parts = local_ip.split('.')
-            network = f"{parts[0]}.{parts[1]}.{parts[2]}.0/24"
-        else:
-            network = "192.168.1.0/24"  # fallback
+        # Try to get network interface information using standard library
+        network = None
+        
+        # Method 1: Try to read from /proc/net/route to get the interface and gateway
+        try:
+            with open('/proc/net/route', 'r') as f:
+                for line in f:
+                    parts = line.strip().split('\t')
+                    if len(parts) >= 2:
+                        interface = parts[0]
+                        # Get IP address for this interface
+                        try:
+                            import fcntl
+                            import struct
+                            siockgifaddr = 0x8915  # Magic number for SIOCGIFADDR
+                            sockfd = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                            
+                            # Get IP address of the interface
+                            try:
+                                ifreq = struct.pack('16sH14s', interface.encode(), socket.AF_INET, b'\x00'*14)
+                                result = fcntl.ioctl(sockfd.fileno(), siockgifaddr, ifreq)
+                                ip_bytes = result[20:24]
+                                interface_ip = socket.inet_ntoa(ip_bytes)
+                                
+                                if interface_ip == local_ip:
+                                    # Get netmask for this interface
+                                    siockifnetmask = 0x891B  # Magic number for SIOCGIFNETMASK
+                                    try:
+                                        ifreq = struct.pack('16sH14s', interface.encode(), socket.AF_INET, b'\x00'*14)
+                                        result = fcntl.ioctl(sockfd.fileno(), siockifnetmask, ifreq)
+                                        netmask_bytes = result[20:24]
+                                        netmask = socket.inet_ntoa(netmask_bytes)
+                                        
+                                        # Calculate network using ipaddress module
+                                        import ipaddress
+                                        ip_interface = ipaddress.IPv4Interface(f"{local_ip}/{netmask}")
+                                        network = str(ip_interface.network)
+                                        break
+                                    except:
+                                        pass
+                            finally:
+                                sockfd.close()
+                        except:
+                            pass
+        except:
+            pass
+        
+        # Method 2: If above fails, use a more conservative approach - only scan the local /24
+        if not network:
+            if '.' in local_ip and (local_ip.startswith('192.168.') or local_ip.startswith('10.') or local_ip.startswith('172.')):
+                parts = local_ip.split('.')
+                # Only scan the /24 that contains our local IP, not all possible subnets
+                network = f"{parts[0]}.{parts[1]}.{parts[2]}.0/24"
+            else:
+                network = "192.168.1.0/24"  # fallback
+                
     except:
         network = "192.168.1.0/24"  # fallback
     

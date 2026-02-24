@@ -76,6 +76,7 @@ meshpi doctor --local
 - `test-restart.sh` - Test script for restart functionality
 - `test-list.sh` - Test script for list functionality
 - `test-ssh-host.sh` - Test script for SSH host functionality
+- `test-enhanced-cli.sh` - Test script for enhanced CLI features
 - `.github/workflows/test-rpi-arch.yml` - CI/CD workflow
 - `docs/RPI-TESTING.md` - Comprehensive testing guide
 - `docs/RPI-TEST-RESULTS.md` - Test results and known issues
@@ -165,11 +166,23 @@ meshpi ls --all
 # Start host service on remote RPi via SSH
 meshpi host --ssh pi@192.168.188.148
 
-# SSH host management
-meshpi host --ssh pi@192.168.188.148 --agent
-meshpi host --ssh pi@192.168.188.148 --port 8080
-meshpi host --ssh pi@192.168.188.148 --ssh-key ~/.ssh/key
-meshpi host --ssh pi@192.168.188.148 --ssh-password
+# Enhanced device management with auto-detection
+meshpi ls                                 # Interactive device list with auto-detection
+meshpi monitor                            # Monitor all devices
+meshpi monitor --continuous               # Continuous monitoring
+meshpi monitor --group servers            # Monitor specific group
+
+# SSH management
+meshpi ssh shell pi@192.168.188.148      # Interactive SSH shell
+meshpi ssh batch "uptime"                 # Batch command execution
+meshpi ssh system-update                  # Update package lists
+meshpi ssh system-upgrade                  # Upgrade packages
+
+# Group management
+meshpi group create servers                # Create device group
+meshpi group add-device servers pi@rpi    # Add device to group
+meshpi group status servers                # Group status check
+meshpi group exec servers "uptime"         # Execute on group
 
 # Local diagnostics only
 meshpi doctor --local

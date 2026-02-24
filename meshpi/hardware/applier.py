@@ -134,9 +134,20 @@ def apply_hardware_profile(profile_id: str, config: dict | None = None) -> list[
 
 def apply_multiple_profiles(profile_ids: list[str], config: dict | None = None) -> None:
     """Apply multiple hardware profiles sequentially."""
+    from .custom import get_all_profiles
+    
+    all_profiles = get_all_profiles()
     all_errors: dict[str, list[str]] = {}
-    for pid in profile_ids:
+    
+    console.print(f"[bold cyan]Applying {len(profile_ids)} hardware profiles...[/bold cyan]")
+    
+    for i, pid in enumerate(profile_ids, 1):
         try:
+            if pid not in all_profiles:
+                console.print(f"[red]✗ Profile '{pid}' not found[/red]")
+                continue
+                
+            console.print(f"\n[cyan]({i}/{len(profile_ids)}) Installing {pid}...[/cyan]")
             errs = apply_hardware_profile(pid, config)
             if errs:
                 all_errors[pid] = errs
@@ -149,5 +160,5 @@ def apply_multiple_profiles(profile_ids: list[str], config: dict | None = None) 
             for e in errs:
                 console.print(f"  [red]{pid}:[/red] {e}")
     else:
-        console.print("\n[bold green]✓ All hardware profiles applied.[/bold green]")
+        console.print("\n[bold green]✓ All hardware profiles applied successfully.[/bold green]")
         console.print("[dim]A reboot is recommended to activate kernel modules and overlays.[/dim]")

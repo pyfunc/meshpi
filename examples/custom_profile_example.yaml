@@ -1,0 +1,43 @@
+# Przykład niestandardowego profilu sprzętowego
+# Format YAML dla importu do MeshPi
+
+id: "custom_sensor_array"
+name: "Custom Sensor Array"
+category: "sensor"
+description: "Custom array of I2C sensors including temperature, humidity, and pressure sensors"
+
+# Pakiety systemowe do instalacji przez apt
+packages:
+  - "i2c-tools"
+  - "python3-smbus"
+  - "python3-dev"
+
+# Kernel modules do załadowania
+kernel_modules:
+  - "i2c-dev"
+  - "i2c-bcm2708"
+
+# Device tree overlays dla /boot/config.txt
+overlays:
+  - "i2c-rtc,ds3231"
+
+# Dodatkowe linie dla /boot/config.txt
+config_txt_lines:
+  - "dtparam=i2c_arm=on"
+  - "dtparam=i2c_arm_baudrate=400000"
+
+# Komendy do wykonania po instalacji
+post_commands:
+  - "pip3 install adafruit-circuitpython-bme280"
+  - "pip3 install adafruit-circuitpython-sht31d"
+  - "i2cdetect -y 1"
+  - "usermod -a -G i2c $USER"
+
+# Tagi do wyszukiwania
+tags:
+  - "i2c"
+  - "sensor"
+  - "temperature"
+  - "humidity"
+  - "pressure"
+  - "custom"
