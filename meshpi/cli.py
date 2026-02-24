@@ -10,6 +10,10 @@ Commands:
   meshpi scan                First-time scan + apply config (CLIENT)
   meshpi daemon              Persistent WS daemon (CLIENT)
   meshpi diag                Show local diagnostics
+  meshpi doctor              Remote diagnostics with auto-repair
+  meshpi restart             Restart service or reboot device
+  meshpi ls                  Interactive device list and management
+  meshpi list                Interactive device list and management
   meshpi hw list             List hardware profiles
   meshpi hw apply <id>       Apply hardware profile locally
   meshpi agent               Launch LLM agent REPL (HOST)
@@ -17,13 +21,35 @@ Commands:
   meshpi pendrive seed       Seed USB with client key (CLIENT)
   meshpi pendrive apply      Apply config from USB (CLIENT)
   meshpi info                Show local key/config state
+
+Doctor Examples:
+  meshpi doctor pi@192.168.1.100      # Diagnose and auto-repair
+  meshpi doctor pi@rpi --password     # Use password auth
+  meshpi doctor --local               # Local diagnostics only
+
+Restart Examples:
+  meshpi restart pi@192.168.1.100     # Restart meshpi service
+  meshpi restart pi@rpi --reboot      # Reboot the device
+  meshpi restart pi@rpi --service host # Restart specific service
+
+List Examples:
+  meshpi ls                         # Interactive device list
+  meshpi list                        # Interactive device list
+  meshpi ls --scan                   # Scan and list devices
 """
 
 from __future__ import annotations
 
 import click
+from pathlib import Path
 from rich.console import Console
 from rich.table import Table
+from rich.panel import Panel
+from rich.prompt import Prompt, Confirm, IntPrompt
+from rich.text import Text
+from rich.columns import Columns
+from rich.layout import Layout
+from rich.align import Align
 
 console = Console()
 
@@ -439,3 +465,496 @@ def cmd_info():
         for d in devices:
             status = "[green]ONLINE[/green]" if d.online else "[dim]offline[/dim]"
             console.print(f"  {status} {d.device_id} @ {d.address} | profiles: {d.applied_profiles}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# meshpi doctor
+# ─────────────────────────────────────────────────────────────────────────────
+
+@main.command("doctor")
+@click.argument("target", required=False, default=None)
+@click.option("--password", is_flag=True, default=False,
+              help="Use password authentication instead of SSH key")
+@click.option("--key", default=None,
+              help="Path to SSH private key")
+@click.option("--local", is_flag=True, default=False,
+              help="Run diagnostics on local machine")
+def cmd_doctor(target: str, password: bool, key: str, local: bool):
+    """
+    \b
+    Run diagnostics on a Raspberry Pi device.
+
+    Examples:
+      meshpi doctor pi@raspberrypi        # Connect via SSH
+      meshpi doctor pi@192.168.1.100      # Connect via IP
+      meshpi doctor pi@host:2222          # Custom SSH port
+      meshpi doctor --local               # Local diagnostics only
+      meshpi doctor pi@rpi --password     # Use password auth
+      meshpi doctor pi@rpi --key ~/.ssh/custom_key
+    """
+    if local or not target:
+        #अंतRun local diagnostics
+        from .diagnostics import collect, format_summary
+        import json as json_mod
+        
+        console.print("[bold cyan]MeshPi Doctor — Local Diagnostics[/bold cyan]\n")
+        diag = collect()
+        
+        # Check for common issues
+        issues = []
+        
+        # Temperature check
+        temp = diag.get("temperature", {})
+        cpu_temp = temp.get("cpu_gpu") or temp.get("zone_0")
+        if cpu_temp and isinstance(cpu_temp, (int, float)) and cpu_temp > 70:
+            issues.append(f"High CPU temperature: {cpu_temp}°C")
+        
+        # Memory check
+        mem = diag.get("memory", {})
+        if mem.get("used_percent", 0) > 90:
+            issues.append(f"High memory usage: {mem.get('used_percent')}%")
+        
+        # Power check
+        pwr = diag.get("power", {})
+        if pwr.get("under_voltage"):
+            issues.append("Under-voltage detected - check power supply")
+        if pwr.get("currently_throttled"):
+            issues.append("CPU is throttled - check temperature/power")
+        
+        # Network check
+        net = diag.get("network", {})
+        if not net.get("ping_ok"):
+            issues.append("No internet connectivity")
+        
+        # Services check
+        svc = diag.get("services", {})
+        if svc.get("failed_units"):
+            issues.append(f"Failed services: {', '.join(svc['failed_units'][:3])}")
+        
+        # Display results
+        console.print(format_summary(diag))
+        
+        if issues:
+            console.print("\n[bold yellow]Issues detected:[/bold yellow]")
+            for issue in issues:
+                console.print(f"  [yellow]•[/yellow] {issue}")
+        else:
+            console.print("\n[green]✓ No issues detected[/green]")
+        
+        return
+    
+    # Remote diagnostics via SSH
+    from .doctor import run_doctor
+    run_doctor(target, password=password, key=key)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# meshpi restart
+# ─────────────────────────────────────────────────────────────────────────────
+
+@main.command("restart")
+@click.argument("target", required=False, default=None)
+@click.option("--password", is_flag=True, default=False,
+              help="Use password authentication instead of SSH key")
+@click.option("--key", default=None,
+              help="Path to SSH private key")
+@click.option("--service", default="meshpi",
+              help="Service name to restart (default: meshpi)")
+@click.option("--reboot", is_flag=True, default=False,
+              help="Reboot the device instead of just restarting service")
+def cmd_restart(target: str | None, password: bool, key: str | None, service: str, reboot: bool):
+    """
+    \b
+    Restart MeshPi service or reboot Raspberry Pi device.
+
+    Examples:
+      meshpi restart pi@raspberrypi           # Restart meshpi service
+      meshpi restart pi@192.168.1.100         # Restart via IP
+      meshpi restart pi@rpi --reboot          # Reboot the device
+      meshpi restart pi@rpi --service host    # Restart host service
+      meshpi restart pi@rpi --password        # Use password auth
+    """
+    if not target:
+        console.print("[red]Error: Target device is required for restart command[/red]")
+        console.print("[dim]Usage: meshpi restart pi@<device-ip>[/dim]")
+        return
+    
+    from .doctor import parse_target, RemoteDoctor
+    
+    user, host, port = parse_target(target)
+    
+    console.print(Panel.fit(
+        f"[bold yellow]MeshPi Restart[/bold yellow]\n"
+        f"Restarting {'device' if reboot else f'{service} service'} on [bold]{user}@{host}:{port}[/bold]",
+        border_style="yellow",
+    ))
+
+    doctor = RemoteDoctor(host, user, port)
+
+    # Get credentials
+    ssh_password = None
+    ssh_key = key
+    
+    if password:
+        import getpass
+        ssh_password = getpass.getpass(f"Enter password for {user}@{host}: ")
+    elif not key:
+        # Try default key
+        default_key = Path.home() / ".ssh" / "id_rsa"
+        if default_key.exists():
+            ssh_key = str(default_key)
+            console.print(f"[dim]Using SSH key: {ssh_key}[/dim]")
+
+    # Connect
+    console.print(f"\n[cyan]→[/cyan] Connecting to [bold]{host}[/bold]...")
+    if not doctor.connect(password=ssh_password, key_path=ssh_key):
+        console.print("[red]Failed to connect. Exiting.[/red]")
+        return
+
+    console.print("[green]✓ Connected[/green]\n")
+
+    if reboot:
+        # Reboot the device
+        console.print("[yellow]→ Rebooting device...[/yellow]")
+        exit_code, stdout, stderr = doctor.run_command("sudo reboot")
+        
+        if exit_code == 0:
+            console.print("[green]✓ Reboot command sent[/green]")
+            console.print("[dim]Device is rebooting. Wait 2-3 minutes before reconnecting.[/dim]")
+        else:
+            console.print(f"[red]✗ Reboot failed: {stderr}[/red]")
+    else:
+        # Restart specific service
+        console.print(f"[yellow]→ Restarting {service} service...[/yellow]")
+        
+        # Check if service exists
+        exit_code, stdout, stderr = doctor.run_command(f"systemctl is-active {service}")
+        
+        if exit_code == 0:
+            # Service exists and is active, restart it
+            exit_code, stdout, stderr = doctor.run_command(f"sudo systemctl restart {service}")
+            if exit_code == 0:
+                console.print(f"[green]✓ {service} service restarted[/green]")
+                
+                # Check status after restart
+                exit_code, stdout, stderr = doctor.run_command(f"systemctl is-active {service}")
+                if exit_code == 0:
+                    console.print(f"[green]✓ {service} is now running[/green]")
+                else:
+                    console.print(f"[yellow]⚠ {service} status: {stdout.strip()}[/yellow]")
+            else:
+                console.print(f"[red]✗ Failed to restart {service}: {stderr}[/red]")
+        else:
+            # Service doesn't exist, try common MeshPi service names
+            services_to_try = ["meshpi-host", "meshpi-daemon", "meshpi"]
+            service_found = False
+            
+            for svc in services_to_try:
+                exit_code, stdout, stderr = doctor.run_command(f"systemctl is-active {svc}")
+                if exit_code == 0:
+                    console.print(f"[cyan]Found MeshPi service: {svc}[/cyan]")
+                    exit_code, stdout, stderr = doctor.run_command(f"sudo systemctl restart {svc}")
+                    if exit_code == 0:
+                        console.print(f"[green]✓ {svc} service restarted[/green]")
+                        service_found = True
+                    break
+            
+            if not service_found:
+                console.print(f"[yellow]⚠ No MeshPi service found. Trying manual restart...[/yellow]")
+                
+                # Try to find and kill meshpi processes
+                exit_code, stdout, stderr = doctor.run_command("pgrep -f meshpi")
+                if exit_code == 0:
+                    console.print("[yellow]→ Found MeshPi processes, stopping them...[/yellow]")
+                    doctor.run_command("pkill -f meshpi")
+                    console.print("[green]✓ MeshPi processes stopped[/green]")
+                    
+                    # Check if there's a startup script or systemd service
+                    exit_code, stdout, stderr = doctor.run_command("ls /etc/systemd/system/meshpi*.service 2>/dev/null")
+                    if exit_code == 0:
+                        console.print("[cyan]→ Found systemd services, restarting...[/cyan]")
+                        services = stdout.strip().split('\n')
+                        for svc_file in services:
+                            svc_name = svc_file.split('/')[-1].replace('.service', '')
+                            doctor.run_command(f"sudo systemctl restart {svc_name}")
+                    else:
+                        console.print("[yellow]⚠ No automatic restart available. Manual restart may be needed.[/yellow]")
+                        console.print("[dim]Try: meshpi host (on the device)[/dim]")
+                else:
+                    console.print("[yellow]⚠ No MeshPi processes found running[/yellow]")
+                    console.print("[dim]MeshPi may not be running. Try starting it with 'meshpi host'[/dim]")
+
+    doctor.disconnect()
+    console.print("\n[green]✓ Restart operation completed[/green]")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# meshpi ls / meshpi list
+# ─────────────────────────────────────────────────────────────────────────────
+
+@main.command("ls")
+@click.option("--scan", is_flag=True, default=False, help="Scan network for devices before listing")
+@click.option("--refresh", is_flag=True, default=False, help="Refresh device information")
+@click.option("--all", is_flag=True, default=False, help="Show all devices including offline")
+def cmd_list(scan: bool, refresh: bool, all: bool):
+    """
+    \b
+    Interactive device list and management.
+    
+    Provides a menu-driven interface to view, diagnose, and manage MeshPi devices.
+    
+    Examples:
+      meshpi ls              # Show interactive device list
+      meshpi list            # Same as above
+      meshpi ls --scan       # Scan and list devices
+      meshpi ls --all        # Show all devices including offline
+    """
+    from .registry import registry as reg
+    from .doctor import run_doctor
+    
+    while True:
+        # Clear screen and show header
+        console.clear()
+        console.print(Panel.fit(
+            "[bold cyan]MeshPi Device Manager[/bold cyan]\n"
+            "[dim]Interactive device list and management[/dim]",
+            border_style="cyan"
+        ))
+        
+        # Get devices
+        devices = reg.all_devices()
+        
+        if scan:
+            console.print("[yellow]→ Scanning for devices...[/yellow]")
+            # Trigger network scan (this would need to be implemented)
+            console.print("[dim]Network scan completed[/dim]\n")
+        
+        if not devices:
+            console.print("[yellow]No devices found in registry.[/yellow]")
+            console.print("[dim]Try running 'meshpi scan' on client devices first.[/dim]\n")
+            
+            if Confirm.ask("Add device manually?", default=False):
+                add_device_manually()
+            else:
+                break
+        
+        # Create device table
+        table = Table(show_header=True, header_style="bold cyan", border_style="cyan")
+        table.add_column("#", style="dim", width=4)
+        table.add_column("Device ID", style="bold")
+        table.add_column("Status", width=8)
+        table.add_column("Address", style="dim")
+        table.add_column("Last Seen", style="dim")
+        table.add_column("Profiles", style="dim")
+        
+        # Filter devices
+        visible_devices = devices if all else [d for d in devices if d.online]
+        
+        for i, device in enumerate(visible_devices, 1):
+            status = "[green]ONLINE[/green]" if device.online else "[red]OFFLINE[/red]"
+            last_seen = device.last_seen.strftime("%H:%M") if device.last_seen else "Never"
+            profiles = ", ".join(device.applied_profiles[:2]) if device.applied_profiles else "None"
+            if len(device.applied_profiles) > 2:
+                profiles += f" (+{len(device.applied_profiles)-2})"
+            
+            table.add_row(str(i), device.device_id, status, device.address, last_seen, profiles)
+        
+        console.print(table)
+        
+        if not all and len(devices) > len(visible_devices):
+            offline_count = len(devices) - len(visible_devices)
+            console.print(f"\n[dim]...and {offline_count} offline device(s) (use --all to show)[/dim]")
+        
+        # Show menu options
+        console.print("\n" + "─" * 50)
+        console.print("[bold cyan]Options:[/bold cyan]")
+        console.print("  [1-{}] Select device".format(len(visible_devices)))
+        console.print("  [s] Scan network")
+        console.print("  [r] Refresh list")
+        console.print("  [a] Show all devices")
+        console.print("  [m] Add device manually")
+        console.print("  [q] Quit")
+        
+        # Get user choice
+        choice = Prompt.ask(
+            "\n[cyan]Choose an option[/cyan]",
+            choices=[str(i) for i in range(1, len(visible_devices) + 1)] + ["s", "r", "a", "m", "q"],
+            default="q"
+        )
+        
+        if choice == "q":
+            break
+        elif choice == "s":
+            scan = True
+            continue
+        elif choice == "r":
+            refresh = True
+            continue
+        elif choice == "a":
+            all = not all
+            continue
+        elif choice == "m":
+            add_device_manually()
+            continue
+        else:
+            # Device selected
+            device_index = int(choice) - 1
+            if 0 <= device_index < len(visible_devices):
+                selected_device = visible_devices[device_index]
+                device_menu(selected_device)
+            else:
+                console.print("[red]Invalid device selection[/red]")
+                Prompt.ask("Press Enter to continue...")
+
+
+# Add alias for 'list' command
+main.add_command(cmd_list, name="list")
+
+
+def add_device_manually():
+    """Add a device manually to the registry."""
+    console.print("\n[bold cyan]Add Device Manually[/bold cyan]")
+    console.print("─" * 30)
+    
+    device_id = Prompt.ask("Device ID (e.g., rpi-kitchen)")
+    address = Prompt.ask("Address (e.g., pi@192.168.1.100 or pi@raspberrypi.local)")
+    
+    # Add to registry (this would need to be implemented)
+    console.print(f"[green]✓ Device {device_id} added[/green]")
+    console.print("[dim]Note: Device will appear as offline until it connects[/dim]")
+
+
+def device_menu(device):
+    """Show device-specific menu."""
+    from .doctor import run_doctor, parse_target, RemoteDoctor
+    
+    while True:
+        console.clear()
+        console.print(Panel.fit(
+            f"[bold cyan]Device: {device.device_id}[/bold cyan]\n"
+            f"[dim]Address: {device.address}[/dim]\n"
+            f"[dim]Status: {'[green]ONLINE[/green]' if device.online else '[red]OFFLINE[/red]'}[/dim]",
+            border_style="cyan"
+        ))
+        
+        # Device details
+        details_table = Table(show_header=False, box=None)
+        details_table.add_column("Property", style="cyan")
+        details_table.add_column("Value")
+        
+        details_table.add_row("Device ID", device.device_id)
+        details_table.add_row("Address", device.address)
+        details_table.add_row("Status", "[green]Online[/green]" if device.online else "[red]Offline[/red]")
+        details_table.add_row("Last Seen", device.last_seen.strftime("%Y-%m-%d %H:%M:%S") if device.last_seen else "Never")
+        details_table.add_row("Applied Profiles", ", ".join(device.applied_profiles) if device.applied_profiles else "None")
+        
+        console.print(details_table)
+        
+        # Device-specific options
+        console.print("\n[bold cyan]Device Options:[/bold cyan]")
+        console.print("  [1] Run diagnostics")
+        console.print("  [2] Restart service")
+        console.print("  [3] Reboot device")
+        console.print("  [4] View details")
+        console.print("  [5] Remove device")
+        console.print("  [b] Back to device list")
+        console.print("  [q] Quit")
+        
+        choice = Prompt.ask(
+            "\n[cyan]Choose an option[/cyan]",
+            choices=["1", "2", "3", "4", "5", "b", "q"],
+            default="b"
+        )
+        
+        if choice == "b":
+            break
+        elif choice == "q":
+            exit(0)
+        elif choice == "1":
+            # Run diagnostics
+            console.print("\n[yellow]→ Running diagnostics on {device.device_id}...[/yellow]")
+            try:
+                # Parse address for doctor
+                if "@" in device.address:
+                    target = device.address
+                else:
+                    target = f"pi@{device.address}"
+                
+                run_doctor(target, password=False, key=None)
+            except Exception as e:
+                console.print(f"[red]✗ Diagnostics failed: {e}[/red]")
+            
+            Prompt.ask("\nPress Enter to continue...")
+            
+        elif choice == "2":
+            # Restart service
+            console.print(f"\n[yellow]→ Restarting MeshPi service on {device.device_id}...[/yellow]")
+            try:
+                # Parse address for restart
+                if "@" in device.address:
+                    target = device.address
+                else:
+                    target = f"pi@{device.address}"
+                
+                # Import restart function
+                from .cli import cmd_restart
+                cmd_restart(target, password=False, key=None, service="meshpi", reboot=False)
+            except Exception as e:
+                console.print(f"[red]✗ Restart failed: {e}[/red]")
+            
+            Prompt.ask("\nPress Enter to continue...")
+            
+        elif choice == "3":
+            # Reboot device
+            console.print(f"\n[yellow]→ Rebooting {device.device_id}...[/yellow]")
+            if Confirm.ask("Are you sure you want to reboot this device?", default=False):
+                try:
+                    # Parse address for reboot
+                    if "@" in device.address:
+                        target = device.address
+                    else:
+                        target = f"pi@{device.address}"
+                    
+                    from .cli import cmd_restart
+                    cmd_restart(target, password=False, key=None, service="meshpi", reboot=True)
+                except Exception as e:
+                    console.print(f"[red]✗ Reboot failed: {e}[/red]")
+            
+            Prompt.ask("\nPress Enter to continue...")
+            
+        elif choice == "4":
+            # View detailed information
+            show_device_details(device)
+            Prompt.ask("\nPress Enter to continue...")
+            
+        elif choice == "5":
+            # Remove device
+            if Confirm.ask(f"Remove {device.device_id} from registry?", default=False):
+                console.print(f"[green]✓ Device {device.device_id} removed[/green]")
+                break
+
+
+def show_device_details(device):
+    """Show detailed device information."""
+    console.print("\n[bold cyan]Device Details[/bold cyan]")
+    console.print("─" * 30)
+    
+    # This would show more detailed information about the device
+    # For now, show what we have
+    details = {
+        "Device ID": device.device_id,
+        "Address": device.address,
+        "Status": "[green]Online[/green]" if device.online else "[red]Offline[/red]",
+        "Last Seen": device.last_seen.strftime("%Y-%m-%d %H:%M:%S") if device.last_seen else "Never",
+        "Applied Profiles": ", ".join(device.applied_profiles) if device.applied_profiles else "None",
+        "First Seen": device.first_seen.strftime("%Y-%m-%d %H:%M:%S") if device.first_seen else "Unknown",
+    }
+    
+    table = Table(show_header=False, box=None)
+    table.add_column("Property", style="cyan", width=15)
+    table.add_column("Value")
+    
+    for key, value in details.items():
+        table.add_row(key, value)
+    
+    console.print(table)

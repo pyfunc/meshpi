@@ -23,6 +23,18 @@ This comprehensive testing suite validates MeshPi installation on different RPi 
 
 # Test multiple RPis simultaneously
 ./batch-rpi-test.sh
+
+# Auto-diagnose and repair RPi issues
+meshpi doctor pi@192.168.188.148
+
+# Restart MeshPi service or reboot device
+meshpi restart pi@192.168.188.148
+
+# Interactive device list and management
+meshpi ls
+
+# Local diagnostics only
+meshpi doctor --local
 ```
 
 ### 📊 Architecture Coverage
@@ -47,6 +59,14 @@ This comprehensive testing suite validates MeshPi installation on different RPi 
 - `run-rpi-tests.sh` - Main Docker test runner script
 - `remote-rpi-test.sh` - SSH test script for real RPi hardware
 - `batch-rpi-test.sh` - Batch testing script for multiple RPis
+- `diagnose-rpi.sh` - Comprehensive RPi diagnostic script
+- `fix-rpi-meshpi.sh` - Automated fix script for common issues
+- `meshpi/doctor.py` - Enhanced doctor with auto-diagnosis and repair
+- `monitor-repair.sh` - RPi-side repair status monitor
+- `show-repair-status.sh` - Visual repair status display
+- `test-doctor.sh` - Test script for doctor functionality
+- `test-restart.sh` - Test script for restart functionality
+- `test-list.sh` - Test script for list functionality
 - `.github/workflows/test-rpi-arch.yml` - CI/CD workflow
 - `docs/RPI-TESTING.md` - Comprehensive testing guide
 - `docs/RPI-TEST-RESULTS.md` - Test results and known issues
@@ -96,6 +116,48 @@ This comprehensive testing suite validates MeshPi installation on different RPi 
 
 # Batch test multiple RPis
 ./batch-rpi-test.sh --devices "pi@rpi1.local pi@rpi2.local"
+
+# Auto-diagnose and repair RPi issues
+meshpi doctor pi@192.168.188.148
+
+# Doctor with password authentication
+meshpi doctor pi@rpi --password
+
+# Doctor with custom SSH key
+meshpi doctor pi@rpi --key ~/.ssh/custom_key
+
+# Restart MeshPi service
+meshpi restart pi@192.168.188.148
+
+# Reboot the device
+meshpi restart pi@192.168.188.148 --reboot
+
+# Restart specific service
+meshpi restart pi@192.168.188.148 --service host
+
+# Interactive device list and management
+meshpi ls
+
+# Interactive device list with scanning
+meshpi ls --scan
+
+# Show all devices including offline
+meshpi ls --all
+
+# Local diagnostics only
+meshpi doctor --local
+
+# Comprehensive diagnostic script
+./diagnose-rpi.sh pi@192.168.188.148
+
+# Automated fix script
+./fix-rpi-meshpi.sh pi@192.168.188.148
+
+# Monitor repair status on RPi (run on RPi)
+./monitor-repair.sh --follow
+
+# Visual repair status display (run on RPi)
+./show-repair-status.sh --continuous
 
 # Generate report
 ./run-rpi-tests.sh && cat test-results/test-report-*.md

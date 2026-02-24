@@ -1,3 +1,30 @@
+## [0.1.17] - 2026-02-24
+
+### Summary
+
+fix(docs): CLI interface improvements
+
+### Docs
+
+- docs: update RPI-TESTING-README.md
+- docs: update RPI-REPAIR-MONITORING.md
+
+### Test
+
+- scripts: update test-doctor.sh
+- scripts: update test-list.sh
+- scripts: update test-restart.sh
+
+### Other
+
+- scripts: update diagnose-rpi.sh
+- scripts: update fix-rpi-meshpi.sh
+- update meshpi/cli.py
+- update meshpi/doctor.py
+- scripts: update monitor-repair.sh
+- scripts: update show-repair-status.sh
+
+
 ## [0.1.16] - 2026-02-24
 
 ### Summary
