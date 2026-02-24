@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "meshpi"
-version = "0.1.28"
+version = "0.1.29"
 description = "🚀 Zero-touch provisioning for Raspberry Pi fleets - Configure WiFi, SSH, users, hardware peripherals, and manage devices through encrypted mesh networking"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -86,8 +86,12 @@ dev = [
 llm = [
     "litellm>=1.0",
 ]
+monitoring = [
+    "prometheus-client>=0.19",
+    "pyyaml>=6.0",
+]
 all = [
-    "meshpi[dev,llm]",
+    "meshpi[dev,llm,monitoring]",
 ]
 
 [project.scripts]

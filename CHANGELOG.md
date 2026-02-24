@@ -1,3 +1,27 @@
+## [0.1.29] - 2026-02-24
+
+### Summary
+
+feat(config): configuration management system
+
+### Test
+
+- update tests/test_monitoring.py
+
+### Build
+
+- update pyproject.toml
+
+### Other
+
+- update meshpi/alerts/__init__.py
+- update meshpi/api/__init__.py
+- update meshpi/api/monitoring.py
+- update meshpi/audit.py
+- update meshpi/metrics/__init__.py
+- update meshpi/ota/__init__.py
+
+
 ## [0.1.28] - 2026-02-24
 
 ### Summary
