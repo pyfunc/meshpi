@@ -1,3 +1,32 @@
+## [0.1.27] - 2026-02-24
+
+### Summary
+
+feat(docs): configuration management system
+
+### Docs
+
+- docs: update CONTRIBUTING.md
+- docs: update README
+- docs: update STANDARDS_TABLE.md
+- docs: update STANDARD_DOCUMENTATION.md
+- docs: update README
+
+### Test
+
+- update tests/test_doctor.py
+
+### Ci
+
+- config: update ci.yml
+
+### Other
+
+- update project.functions.toon
+- scripts: update project.sh
+- update project.toon-schema.json
+
+
 ## [0.1.26] - 2026-02-24
 
 ### Summary

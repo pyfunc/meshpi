@@ -342,6 +342,13 @@ See [`.env.example`](.env.example) for all available variables including:
 - **Security**: Key paths, crypto settings
 - **Monitoring**: Log levels, file paths
 
+### 📚 **Standard Documentation**
+
+For standardized documentation on device groups and hardware profiles, see:
+- **[Standard Documentation](docs/STANDARD_DOCUMENTATION.md)** - Complete guide to groups (devices) and profiles (OS/drivers)
+- **[Hardware Group Management](docs/HARDWARE-GROUP-MANAGEMENT.md)** - Advanced group operations
+- **[SSH Hardware Management](docs/SSH-HARDWARE-MANAGEMENT.md)** - Remote hardware control
+
 ---
 
 ## 📁 Repository Organization

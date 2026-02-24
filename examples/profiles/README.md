@@ -1,10 +1,10 @@
 # 🛠️ Przykładowe Profile Sprzętowe MeshPi
 
-Ta kolekcja zawiera 12 przykładowych profili sprzętowych gotowych do użycia z MeshPi. Każdy profil jest w pełni skonfigurowany z wszystkimi wymaganymi pakietami, modułami kernela i komendami post-instalacyjnymi.
+Ta kolekcja zawiera **20 przykładowych profili sprzętowych** gotowych do użycia z MeshPi. Każdy profil jest w pełni skonfigurowany z wszystkimi wymaganymi pakietami, modułami kernela i komendami post-instalacyjnymi.
 
 ## 📋 Lista Profili
 
-### 🌡️ **Sensory**
+### 🌡️ **Sensory (4 profile)**
 
 #### [BME280 Weather Station](bme280_weather_station.yaml)
 - **Kategoria:** `sensor`
@@ -27,9 +27,16 @@ Ta kolekcja zawiera 12 przykładowych profili sprzętowych gotowych do użycia z
 - **Funkcje:** Dashboard web, logging, alerty
 - **Biblioteki:** Flask, Plotly, Pandas, Schedule
 
+#### [Voice Assistant with LLM](voice_assistant_llm.yaml)
+- **Kategoria:** `ai`
+- **Interfejs:** Audio
+- **Zastosowanie:** Asystent głosowy z AI, smart home
+- **Funkcje:** Rozpoznawanie mowy, LLM, syntezator mowy
+- **Biblioteki:** OpenAI Whisper, pyttsx3, LiteLLM
+
 ---
 
-### 🖥️ **Wyświetlacze**
+### 🖥️ **Wyświetlacze (3 profile)**
 
 #### [OLED SSD1306 Status Display](oled_ssd1306_status_display.yaml)
 - **Kategoria:** `display`
@@ -37,6 +44,20 @@ Ta kolekcja zawiera 12 przykładowych profili sprzętowych gotowych do użycia z
 - **Zastosowanie:** Wyświetlacze statusu, monitoring wizualny
 - **Funkcje:** 128x64 OLED, grafika, tekst
 - **Biblioteki:** adafruit-circuitpython-ssd1306, Pillow, Luma.OLED
+
+#### [Waveshare 4.3" LCD Touchscreen](waveshare_lcd_43_touchscreen.yaml)
+- **Kategoria:** `display`
+- **Interfejs:** SPI
+- **Zastosowanie:** Panele kontrolne, interfejsy dotykowe
+- **Funkcje:** 4.3" LCD, touchscreen, X11
+- **Biblioteki:** Pygame, Pillow, OpenCV
+
+#### [7" HDMI Touchscreen Display](lcd_7_touchscreen_hdmi.yaml)
+- **Kategoria:** `display`
+- **Interfejs:** HDMI
+- **Zastosowanie:** Tablety, dashboardy, duże interfejsy
+- **Funkcje:** 7" LCD, pojemnościowy touchscreen
+- **Biblioteki:** Pygame, Kivy, OpenCV
 
 ---
 
@@ -51,7 +72,25 @@ Ta kolekcja zawiera 12 przykładowych profili sprzętowych gotowych do użycia z
 
 ---
 
-### 🎛️ **GPIO i Sterowanie**
+### 🚗 **Motory (2 profile)**
+
+#### [L298N DC Motor Controller](motor_l298n_controller.yaml)
+- **Kategoria:** `motor`
+- **Interfejs:** GPIO
+- **Zastosowanie:** Robotyka, samochody, łodzie
+- **Funkcje:** Kontrola prędkości PWM, zmiana kierunku
+- **Biblioteki:** RPi.GPIO, GPIOZero, NumPy
+
+#### [PCA9685 Servo Motor Controller](servo_pca9685_controller.yaml)
+- **Kategoria:** `motor`
+- **Interfejs:** I2C
+- **Zastosowanie:** Robotyka, gimbaly, animatronika
+- **Funkcje:** 16-kanałowy PWM, precyzyjne pozycjonowanie
+- **Biblioteki:** adafruit-circuitpython-pca9685, ServoKit
+
+---
+
+### 🎛️ **GPIO i Sterowanie (2 profile)**
 
 #### [A4988 Stepper Motor Controller](stepper_a4988_controller.yaml)
 - **Kategoria:** `gpio`
@@ -116,7 +155,7 @@ Ta kolekcja zawiera 12 przykładowych profili sprzętowych gotowych do użycia z
 
 ---
 
-### 🎩 **HATs**
+### 🎩 **HATs (5 profile)**
 
 #### [Raspberry Pi Sense HAT](rpi_sense_hat_complete.yaml)
 - **Kategoria:** `hat`
@@ -124,6 +163,43 @@ Ta kolekcja zawiera 12 przykładowych profili sprzętowych gotowych do użycia z
 - **Zastosowanie:** Wszechstrony zestaw sensorów
 - **Funkcje:** LED matrix, joystick, multiple sensory
 - **Biblioteki:** Sense HAT, Matplotlib, Pillow
+
+#### [PiSugar UPS HAT](pisugar_ups_hat.yaml)
+- **Kategoria:** `hat`
+- **Interfejs:** I2C
+- **Zastosowanie:** Zasilanie awaryjne, przenośne projekty
+- **Funkcje:** Monitorowanie baterii, bezpieczne wyłączanie
+- **Biblioteki:** PiSugar, ADS1115
+
+#### [Adafruit Fruit HAT](adafruit_fruit_hat.yaml)
+- **Kategoria:** `hat`
+- **Interfejs:** I2C
+- **Zastosowanie:** Interaktywne sensory, wyświetlacze
+- **Funkcje:** LED matrix, sensory, dotyk pojemnościowy
+- **Biblioteki:** Adafruit CircuitPython, BME280
+
+#### [Pimoroni Explorer HAT](pimoroni_explorer_hat.yaml)
+- **Kategoria:** `hat`
+- **Interfejs:** I2C + GPIO
+- **Zastosowanie:** Robotyka, ekspansja, automatyka
+- **Funkcje:** Sterowniki silników, ADC, I/O
+- **Biblioteki:** ExplorerHAT, NumPy
+
+#### [Waveshare IoT HAT](waveshare_iot_hat.yaml)
+- **Kategoria:** `hat`
+- **Interfejs:** I2C + SPI + Serial
+- **Zastosowanie:** IoT, tracking, monitoring zdalny
+- **Funkcje:** LoRa, GPS, sensory środowiskowe
+- **Biblioteki:** Adafruit LoRa, GPS3, SPIdev
+
+---
+
+## 📚 **Standard Documentation**
+
+For complete standardized documentation on device groups and hardware profiles, see:
+- **[Standard Documentation](../../docs/STANDARD_DOCUMENTATION.md)** - Groups (devices) ↔ Profiles (OS/drivers)
+- **[Easy Profile Management](EASY_PROFILE_MANAGEMENT.md)** - Step-by-step guide
+- **[Hardware Group Management](../../docs/HARDWARE-GROUP-MANAGEMENT.md)** - Advanced operations
 
 ---
 
