@@ -1,64 +1,62 @@
-# ─────────────────────────────────────────────────────────────────
-# MeshPi HOST image
-# Runs: meshpi host (FastAPI + WebSocket + mDNS advertisement)
-#
-# Build:  docker build -t meshpi-host -f docker/host/Dockerfile .
-# Run:    docker run -p 7422:7422 meshpi-host
-# ─────────────────────────────────────────────────────────────────
-FROM python:3.12-slim-bookworm AS builder
+"""
+MeshPi Host Docker Image
 
-WORKDIR /build
-COPY pyproject.toml README.md LICENSE ./
-COPY meshpi/ ./meshpi/
+Usage:
+    docker build -t meshpi-host .
+    docker run -p 7422:7422 meshpi-host
 
-RUN pip install --no-cache-dir build && \
-    python -m build --wheel && \
-    ls dist/
+Environment Variables:
+    MESHPI_PORT       - Host port (default: 7422)
+    MESHPI_BIND       - Bind address (default: 0.0.0.0)
+    MESHPI_CONFIG_DIR - Config directory (default: /app/config)
+"""
 
+FROM python:3.11-slim
 
-FROM python:3.12-slim-bookworm
-
-LABEL maintainer="Softreck <info@softreck.dev>"
-LABEL description="MeshPi Host — encrypted RPi fleet configuration server"
+LABEL maintainer="MeshPi"
 LABEL version="0.2.0"
-LABEL license="Apache-2.0"
+LABEL description="MeshPi Host Service for Raspberry Pi Fleet Management"
 
-# Runtime dependencies only
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV MESHPI_PORT=7422
+ENV MESHPI_BIND=0.0.0.0
+ENV MESHPI_CONFIG_DIR=/app/config
+
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    iputils-ping \
+    curl \
     avahi-daemon \
     avahi-utils \
     libnss-mdns \
-    dbus \
     && rm -rf /var/lib/apt/lists/*
 
+# Create app directory
 WORKDIR /app
 
-# Copy built wheel from builder stage
-COPY --from=builder /build/dist/*.whl /tmp/
-RUN pip install --no-cache-dir /tmp/*.whl "meshpi[llm]" 2>/dev/null || \
-    pip install --no-cache-dir /tmp/*.whl && \
-    rm /tmp/*.whl
+# Create non-root user
+RUN useradd -m -u 1000 meshpi && \
+    mkdir -p /app/config /app/data && \
+    chown -R meshpi:meshpi /app
 
-# Create meshpi config directory
-RUN mkdir -p /root/.meshpi && chmod 700 /root/.meshpi
+# Install Python dependencies
+COPY pyproject.toml .
+RUN pip install --no-cache-dir -e . && \
+    pip install --no-cache-dir prometheus-client pyyaml
 
-# Copy entrypoint
-COPY docker/host/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# Copy application code
+COPY --chown=meshpi:meshpi . .
 
-# Config volume — mount your config.env here
-VOLUME ["/root/.meshpi"]
+# Switch to non-root user
+USER meshpi
 
-# Default environment
-ENV MESHPI_PORT=7422
-ENV MESHPI_BIND=0.0.0.0
-ENV PYTHONUNBUFFERED=1
-
+# Expose ports
 EXPOSE 7422
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD python -c "import httpx; httpx.get('http://localhost:7422/health', timeout=4).raise_for_status()"
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:7422/health || exit 1
 
-ENTRYPOINT ["/entrypoint.sh"]
-CMD ["host"]
+# Run the host service
+CMD ["python", "-m", "meshpi.host"]

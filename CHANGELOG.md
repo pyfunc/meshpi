@@ -1,3 +1,23 @@
+## [0.1.31] - 2026-02-24
+
+### Summary
+
+feat(docs): configuration management system
+
+### Test
+
+- update tests/test_e2e.py
+
+### Other
+
+- update Dockerfile.client
+- config: update dashboards.yml
+- update deploy/grafana/provisioning/dashboards/json/meshpi-overview.json
+- config: update datasources.yml
+- config: update prometheus.yml
+- update meshpi/image/__init__.py
+
+
 ## [0.1.30] - 2026-02-24
 
 ### Summary

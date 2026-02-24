@@ -1,0 +1,17 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'meshpi-monitor'
+
+scrape_configs:
+  # MeshPi Host metrics
+  - job_name: 'meshpi-host'
+    static_configs:
+      - targets: ['meshpi-host:7422']
+    metrics_path: '/metrics'
+    
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']

@@ -1,0 +1,86 @@
+"""
+MeshPi Client Docker Image
+
+Simulates a Raspberry Pi client for E2E testing.
+"""
+
+FROM python:3.11-slim
+
+LABEL maintainer="MeshPi"
+LABEL description="MeshPi Client for E2E Testing"
+
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+WORKDIR /app
+
+# Install dependencies
+COPY pyproject.toml .
+RUN pip install --no-cache-dir -e . && \
+    pip install --no-cache-dir websockets pytest pytest-asyncio httpx
+
+# Copy application code
+COPY . .
+
+# Create client entrypoint script
+RUN echo '#!/bin/bash\n\
+set -e\n\
+echo "Starting MeshPi client $DEVICE_ID..."\n\
+echo "Connecting to $MESHPI_HOST_IP:$MESHPI_HOST_PORT"\n\
+python -c "\n\
+import asyncio\n\
+import json\n\
+import os\n\
+import websockets\n\
+\n\
+async def run_client():\n\
+    host = os.environ.get(\"MESHPI_HOST_IP\", \"localhost\")\n\
+    port = int(os.environ.get(\"MESHPI_HOST_PORT\", \"7422\"))\n\
+    device_id = os.environ.get(\"DEVICE_ID\", \"rpi-test-001\")\n\
+    \n\
+    uri = f\"ws://{host}:{port}/ws/{device_id}\"\n\
+    print(f\"Connecting to {uri}\")\n\
+    \n\
+    async with websockets.connect(uri) as ws:\n\
+        # Send hello\n\
+        await ws.send(json.dumps({\"type\": \"hello\", \"device_id\": device_id, \"address\": \"docker\"}))\n\
+        print(\"Sent hello\")\n\
+        \n\
+        # Simulate diagnostics\n\
+        import random\n\
+        while True:\n\
+            msg = await asyncio.wait_for(ws.recv(), timeout=60)\n\
+            data = json.loads(msg)\n\
+            print(f\"Received: {data.get(\\\"type\\\")}\")\n\
+            \n\
+            if data.get(\"type\") == \"welcome\":\n\
+                # Start sending diagnostics\n\
+                while True:\n\
+                    diag = {\n\
+                        \"type\": \"diagnostics\",\n\
+                        \"seq\": int(asyncio.get_event_loop().time()),\n\
+                        \"data\": {\n\
+                            \"cpu\": {\"load_1m\": round(random.uniform(0.5, 2.0), 2)},\n\
+                            \"memory\": {\"used_percent\": round(random.uniform(40, 80), 1)},\n\
+                            \"temperature\": {\"cpu_gpu\": round(random.uniform(40, 65), 1)},\n\
+                            \"wifi\": {\"signal\": random.randint(-80, -40)}\n\
+                        }\n\
+                    }\n\
+                    await ws.send(json.dumps(diag))\n\
+                    await asyncio.sleep(10)\n\
+            \n\
+            elif data.get(\"type\") == \"command\":\n\
+                # Respond to commands\n\
+                result = {\"success\": True, \"output\": \"Command executed\"}\n\
+                await ws.send(json.dumps({\n\
+                    \"type\": \"command_result\",\n\
+                    \"command_id\": data.get(\"command_id\"),\n\
+                    \"result\": result\n\
+                }))\n\
+\n\
+asyncio.run(run_client())\n\
+"\n\
+' > /app/client_entrypoint.sh && chmod +x /app/client_entrypoint.sh
+
+# Run the client
+CMD ["/app/client_entrypoint.sh"]
