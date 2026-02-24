@@ -1,3 +1,31 @@
+## [0.1.3] - 2026-02-24
+
+### Summary
+
+refactor(goal): CLI interface improvements
+
+### Build
+
+- update pyproject.toml
+
+### Config
+
+- config: update goal.yaml
+
+### Other
+
+- update meshpi/__init__.py
+- update meshpi/cli.py
+- update meshpi/client.py
+- update meshpi/diagnostics.py
+- update meshpi/hardware/__init__.py
+- update meshpi/hardware/applier.py
+- update meshpi/hardware/profiles.py
+- update meshpi/host.py
+- update meshpi/llm_agent.py
+- update meshpi/registry.py
+
+
 ## [0.1.2] - 2026-02-24
 
 ### Summary
