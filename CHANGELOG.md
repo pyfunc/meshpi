@@ -1,3 +1,17 @@
+## [0.1.34] - 2026-02-24
+
+### Summary
+
+docs(docs): deep code analysis engine with 4 supporting modules
+
+### Docs
+
+- docs: update README
+- docs: update CHEAT_SHEET.md
+- docs: update COMPLETE_DEPLOYMENT_GUIDE.md
+- docs: update DOCUMENTATION_INDEX.md
+
+
 ## [0.1.33] - 2026-02-24
 
 ### Summary

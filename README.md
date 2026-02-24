@@ -30,6 +30,80 @@
 
 </div>
 
+
+## 🏗️ **Architektura Systemu**
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           🚀 MESHPI FLEET MANAGEMENT                           │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   GRUPY RPi     │───▶│   PROFILE HW    │───▶│   INSTALACJA    │───▶│   MONITORING    │
+│                 │    │                 │    │                 │    │                 │
+│ • office_sensors│    │ • OS + Drivers  │    │ • Pakiety       │    │ • Prometheus    │
+│ • warehouse_auto│    │ • Biblioteki    │    │ • Moduły        │    │ • Grafana       │
+│ • lab_gpio      │    │ • Konfiguracja  │    │ • Uprawnienia   │    │ • Alerting      │
+│ • home_automation│   │                 │    │                 │    │ • Audit Logs    │
+└─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                       │                       │                       │
+         ▼                       ▼                       ▼                       ▼
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   LOGIKA        │    │   KONFIGURACJA  │    │   DEPLOYMENT    │    │   OBSERWOWALNOŚĆ│
+│                 │    │                 │    │                 │    │                 │
+│ • Logiczne      │    │ • YAML profiles │    │ • SSH Remote    │    │ • Real-time     │
+│ • Zbiory        │    │ • Kategorie     │    │ • Batch Install │    │ • Historical    │
+│ • Przeznaczenie │    │ • Tagi          │    │ • OTA Updates   │    │ • Alerting      │
+└─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘
+```
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           🔥 FLOW PRACY MESHPI                                │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────┐
+│  PLAN   │───▶│ KONFIG  │───▶│ WYBÓR   │───▶│ INSTAL  │───▶│ MONITOR │
+│         │    │         │    │         │    │         │    │         │
+│ Grupy   │    │ Urządzenia│    │ Profile │    │ Pakiety │    │ Metryki │
+│ Profile │    │ SSH     │    │ Hardware│    │ Moduły  │    │ Alerty  │
+│ Scenariusz│   │ Sieć    │    │ Drivers │    │ Uprawnienia│ │ Logs    │
+└─────────┘    └─────────┘    └─────────┘    └─────────┘    └─────────┘
+```
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                         🏢 TYPOWE WDROŻENIE - BIURO                            │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────┐
+│  HOST PC        │ ──▶  meshpi host (port 7422)
+│ 192.168.1.10   │
+└─────────────────┘
+         │
+         ▼ SSH + ENCRYPTION
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   RPi #1        │    │   RPi #2        │    │   RPi #3        │
+│ 192.168.1.100   │    │ 192.168.1.101   │    │ 192.168.1.102   │
+│                 │    │                 │    │                 │
+│ • BME280 Sensor │    │ • BME280 Sensor │    │ • BME280 Sensor │
+│ • OLED Display  │    │ • OLED Display  │    │ • OLED Display  │
+│ • WiFi Config  │    │ • WiFi Config  │    │ • WiFi Config  │
+│ • SSH Keys     │    │ • SSH Keys     │    │ • SSH Keys     │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                       │                       │
+         ▼                       ▼                       ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                         📊 PROMETHEUS + GRAFANA                              │
+│                                                                                 │
+│ • CPU/Memory/Temperature Metrics                                               │
+│ • Sensor Data (temp/humidity/pressure)                                          │
+│ • Device Status & Health                                                        │
+│ • Alert Rules (offline, high temp, low memory)                                 │
+│ • Historical Data & Trends                                                      │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
 ## 📋 Overview
 
 MeshPi eliminates the manual work of configuring Raspberry Pi devices from factory defaults. Whether deploying one device or an entire fleet, MeshPi handles:
@@ -48,6 +122,20 @@ All secured with **RSA-2048 + AES-256-GCM encryption**. No credentials ever trav
 
 ## ⚡ Quick Start
 
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           🚀 QUICK START FLOW                                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────┐         ┌─────────────────┐         ┌─────────────────┐
+│   HOST PC       │         │   MESHPI HOST   │         │ CLIENT RPi      │
+│                 │         │                 │         │                 │
+│ • Install MeshPi│ ──▶     │ • Config Wizard │ ──▶     │ • Scan & Join   │
+│ • Run Config   │         │ • Start Service │         │ • Auto-Setup    │
+│ • Start Host   │         │ • Port 7422     │         │ • Reboot Ready  │
+└─────────────────┘         └─────────────────┘         └─────────────────┘
+```
+
 ```bash
 # Install
 pip install meshpi
@@ -65,6 +153,20 @@ meshpi scan      # Auto-discovers host, configures itself, reboots
 ---
 
 ## 📱 Client Setup (Raspberry Pi)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                         📱 RASPBERRY PI SETUP FLOW                             │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│  FACTORY RPi    │───▶│  CONNECT NET   │───▶│  UPDATE SYSTEM │───▶│  SCAN & JOIN   │
+│                 │    │                 │    │                 │    │                 │
+│ • Fresh OS      │    │ • WiFi/Network  │    │ • apt update    │    │ • meshpi scan   │
+│ • Default Config│    │ • Internet      │    │ • apt upgrade   │    │ • Auto-discover │
+│ • No Config     │    │ • Access        │    │ • reboot        │    │ • Auto-setup    │
+└─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘
+```
 
 ### 🔧 Prerequisites Setup
 
@@ -148,6 +250,21 @@ pip3 install meshpi==0.1.14
 
 ## ✨ Features
 
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           🔥 MESHPI FEATURE MATRIX                              │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│  ENCRYPTION     │    │  FLEET MGMT     │    │  HARDWARE       │    │  MONITORING     │
+│                 │    │                 │    │                 │    │                 │
+│ • RSA-2048      │    │ • WebSocket     │    │ • 49+ Profiles   │    │ • Prometheus    │
+│ • AES-256-GCM   │    │ • Real-time     │    │ • Group Mgmt    │    │ • Grafana       │
+│ • mDNS Discovery│    │ • Push Updates  │    │ • Auto-Install  │    │ • Alerting      │
+│ • Zero-Touch    │    │ • Remote CMD    │    │ • Custom Config │    │ • Audit Logs    │
+└─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘
+```
+
 ### 🔐 Encrypted Zero-Touch Provisioning
 - RSA-2048 key exchange + AES-256-GCM encryption
 - No shared secrets, no cleartext on the wire
@@ -161,6 +278,30 @@ pip3 install meshpi==0.1.14
 - Trigger reboots with delay
 
 ### 🔧 49+ Hardware Profiles with Group Management
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                         🛠️ HARDWARE PROFILES CATALOG                           │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   DISPLAYS      │    │    SENSORS      │    │     MOTORS      │    │      HATs       │
+│                 │    │                 │    │                 │    │                 │
+│ • OLED SSD1306  │    │ • BME280        │    │ • A4988 Stepper │    │ • Sense HAT     │
+│ • TFT ILI9341   │    │ • DS18B20       │    │ • PCA9685 Servo │    │ • PiSugar UPS   │
+│ • e-Paper       │    │ • MPU-6050      │    │ • DC Motors     │    │ • RTC DS3231    │
+│ • HDMI 4K       │    │ • INA219        │    │ • Relays        │    │ • Adafruit HAT  │
+└─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘
+
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│    CAMERAS      │    │     AUDIO       │    │   NETWORKING    │    │      GPIO       │
+│                 │    │                 │    │                 │    │                 │
+│ • RPi Camera v2 │    │ • HiFiBerry DAC │    │ • CAN Bus       │    │ • Distance      │
+│ • USB UVC       │    │ • I2S Microphone│    │ • RS-485        │    │ • Ultrasonic    │
+│ • IR Night Vision│   │ • PWM Speakers  │    │ • LoRa          │    │ • IR Sensors    │
+│ • MIPI CSI      │    │ • Bluetooth     │    │ • nRF24L01      │    │ • Touch Sensors │
+└─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘
+```
 
 | Category | Examples |
 |----------|----------|
@@ -216,6 +357,32 @@ meshpi diag
 Collects CPU load, memory, temperature, GPIO states, I2C scan, USB devices, WiFi signal, services, logs, and more.
 
 ### 📈 Monitoring & Observability
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                         📊 MESHPI MONITORING STACK                              │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   AUDIT LOGS    │    │  PROMETHEUS     │    │   ALERT ENGINE  │    │   GRAFANA       │
+│                 │    │                 │    │                 │    │                 │
+│ • JSONL Format │    │ • Metrics API   │    │ • 9 Rules       │    │ • Dashboards    │
+│ • Operations    │    │ • Time Series   │    │ • Temperature   │    │ • Visualization │
+│ • Device Events │    │ • Device Health │    │ • Memory        │    │ • Historical    │
+│ • Timestamps   │    │ • System Stats  │    │ • Offline       │    │ • Alerting      │
+└─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                       │                       │                       │
+         ▼                       ▼                       ▼                       ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           🚀 CENTRALIZED MONITORING                             │
+│                                                                                 │
+│ • Real-time Metrics Collection                                                  │
+│ • Historical Data Storage                                                       │
+│ • Alert Notifications                                                           │
+│ • Visual Dashboards                                                             │
+│ • Fleet Health Overview                                                         │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
 
 MeshPi includes built-in monitoring with Prometheus metrics, alerting, and audit logging:
 
@@ -281,19 +448,38 @@ pip install "meshpi[all]"
 ## 🏗️ Architecture
 
 ```
-HOST (PC / RPi)                    CLIENT (fresh RPi)
-─────────────────                  ─────────────────────
-meshpi config                      meshpi scan
-  → ~/.meshpi/config.env             → mDNS discovery
-meshpi host                          → RSA key exchange
-  → FastAPI REST API             ←   → Encrypted config
-  → WebSocket /ws/{id}           →   → Apply & reboot
-  → mDNS advertisement
-  → Dashboard /dashboard
-                           ↕
-                    meshpi daemon
-                      → Diagnostics push (60s)
-                      → Real-time commands
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           🚀 MESHPI INSTALLATION FLOW                           │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────┐                     ┌─────────────────┐
+│   HOST PC       │                     │   CLIENT RPi    │
+│                 │                     │                 │
+│ meshpi config   │                     │ meshpi scan     │
+│   ↓             │                     │   ↓             │
+│ ~/.meshpi/      │                     │ mDNS discovery  │
+│ config.env      │                     │   ↓             │
+│                 │                     │ RSA key exchange│
+│ meshpi host     │◀────────────────────│   ↓             │
+│   ↓             │   Encrypted config │ Apply settings  │
+│ FastAPI API     │────────────────────▶│   ↓             │
+│   ↓             │                     │ Reboot          │
+│ WebSocket       │                     │   ↓             │
+│   ↓             │                     │ Ready!          │
+│ Dashboard       │                     │                 │
+│   ↓             │                     │                 │
+│ mDNS Adv        │                     │                 │
+└─────────────────┘                     └─────────────────┘
+
+                            ↕ Persistent Connection
+                    ┌─────────────────────────────────────────┐
+                    │           MESHPI DAEMON                │
+                    │                                         │
+                    │ • Diagnostics push (60s interval)     │
+                    │ • Real-time commands                   │
+                    │ • Status updates                       │
+                    │ • Health monitoring                    │
+                    └─────────────────────────────────────────┘
 ```
 
 ---
@@ -378,7 +564,10 @@ See [`.env.example`](.env.example) for all available variables including:
 ### 📚 **Standard Documentation**
 
 For standardized documentation on device groups and hardware profiles, see:
+- **[Complete Deployment Guide](docs/COMPLETE_DEPLOYMENT_GUIDE.md)** - Comprehensive step-by-step deployment guide
+- **[Cheat Sheet](docs/CHEAT_SHEET.md)** - Quick reference commands and scenarios
 - **[Standard Documentation](docs/STANDARD_DOCUMENTATION.md)** - Complete guide to groups (devices) and profiles (OS/drivers)
+- **[Standards Table](docs/STANDARDS_TABLE.md)** - Quick reference table of all standards
 - **[Hardware Group Management](docs/HARDWARE-GROUP-MANAGEMENT.md)** - Advanced group operations
 - **[SSH Hardware Management](docs/SSH-HARDWARE-MANAGEMENT.md)** - Remote hardware control
 
