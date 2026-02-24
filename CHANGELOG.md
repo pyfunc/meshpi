@@ -1,3 +1,15 @@
+## [0.1.13] - 2026-02-24
+
+### Summary
+
+feat(config): configuration management system
+
+### Other
+
+- update meshpi/applier.py
+- update meshpi/config.py
+
+
 ## [0.1.12] - 2026-02-24
 
 ### Summary

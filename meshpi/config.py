@@ -31,14 +31,29 @@ CONFIG_FIELDS = [
     ("WIFI_COUNTRY",    "WiFi country code (e.g. PL)",      False, "PL"),
     # --- Hostname ---
     ("RPI_HOSTNAME",    "Default hostname prefix",          False, "meshpi"),
-    # --- SSH public key ---
+    # --- SSH configuration ---
     ("SSH_PUBLIC_KEY",  "SSH public key (~/.ssh/id_rsa.pub)", False, ""),
+    ("SSH_ENABLE",      "Enable SSH on client (yes/no)",    False, "yes"),
+    ("SSH_PORT",        "SSH port",                         False, "22"),
+    ("SSH_PASSWORD_AUTH", "SSH password authentication (yes/no)", False, "yes"),
     # --- Locale / timezone ---
     ("RPI_TIMEZONE",    "Timezone (e.g. Europe/Warsaw)",    False, "Europe/Warsaw"),
     ("RPI_LOCALE",      "Locale (e.g. pl_PL.UTF-8)",        False, "pl_PL.UTF-8"),
     ("RPI_KEYBOARD",    "Keyboard layout (e.g. pl)",        False, "pl"),
+    # --- Hardware interfaces ---
+    ("ENABLE_I2C",      "Enable I2C interface (yes/no)",    False, "no"),
+    ("ENABLE_SPI",      "Enable SPI interface (yes/no)",    False, "no"),
+    ("ENABLE_SERIAL",   "Enable serial console (yes/no)",   False, "no"),
+    ("ENABLE_CAMERA",   "Enable camera interface (yes/no)", False, "no"),
+    # --- Network ---
+    ("STATIC_IP",       "Static IP address (empty for DHCP)", False, ""),
+    ("GATEWAY",         "Gateway IP (for static IP)",       False, ""),
+    ("DNS_SERVERS",     "DNS servers (comma-separated)",    False, "8.8.8.8,8.8.4.4"),
     # --- Optional custom script ---
     ("POST_SCRIPT_URL", "URL of post-install shell script (optional)", False, ""),
+    # --- LLM Agent (optional) ---
+    ("LITELLM_MODEL",   "LLM model for agent (e.g. gpt-4o)", False, ""),
+    ("LITELLM_API_KEY", "LLM API key (optional)",           True,  ""),
 ]
 
 

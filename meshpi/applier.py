@@ -45,7 +45,9 @@ def apply_config(config: dict) -> None:
     _apply_hostname(config, errors)
     _apply_user(config, errors)
     _apply_wifi(config, errors)
-    _apply_ssh_key(config, errors)
+    _apply_ssh(config, errors)
+    _apply_interfaces(config, errors)
+    _apply_network(config, errors)
     _apply_locale_timezone(config, errors)
     _apply_keyboard(config, errors)
     _apply_post_script(config, errors)
@@ -139,30 +141,135 @@ network={{
         errors.append(f"wifi: {exc}")
 
 
-def _apply_ssh_key(config: dict, errors: list) -> None:
+def _apply_ssh(config: dict, errors: list) -> None:
+    """Apply SSH configuration: enable/disable, port, password auth, and key injection."""
+    ssh_enable = config.get("SSH_ENABLE", "yes").strip().lower() in ("yes", "true", "1")
+    ssh_port = config.get("SSH_PORT", "22").strip()
+    password_auth = config.get("SSH_PASSWORD_AUTH", "yes").strip().lower() in ("yes", "true", "1")
     key = config.get("SSH_PUBLIC_KEY", "").strip()
     user = config.get("RPI_USER", "pi").strip()
 
-    if not key:
-        return
     try:
-        ssh_dir = Path(f"/home/{user}/.ssh")
-        _sudo(["mkdir", "-p", str(ssh_dir)])
-        authorized = ssh_dir / "authorized_keys"
+        # Enable/disable SSH service
+        if ssh_enable:
+            _sudo(["systemctl", "enable", "ssh"], check=False)
+            _sudo(["systemctl", "start", "ssh"], check=False)
+            console.print(f"  [green]✓[/green] SSH enabled")
+        else:
+            _sudo(["systemctl", "disable", "ssh"], check=False)
+            _sudo(["systemctl", "stop", "ssh"], check=False)
+            console.print(f"  [yellow]✓[/yellow] SSH disabled")
+            return  # No need to configure further if disabled
 
-        # Append key if not already present
-        existing = ""
-        if authorized.exists():
-            existing = authorized.read_text()
-        if key not in existing:
-            _write_as_root(str(authorized), existing + "\n" + key + "\n")
+        # Configure SSH port
+        if ssh_port != "22":
+            sshd_config = Path("/etc/ssh/sshd_config")
+            if sshd_config.exists():
+                content = sshd_config.read_text()
+                if f"Port {ssh_port}" not in content:
+                    # Add or replace Port directive
+                    lines = []
+                    port_set = False
+                    for line in content.splitlines():
+                        if line.startswith("#Port ") or line.startswith("Port "):
+                            lines.append(f"Port {ssh_port}")
+                            port_set = True
+                        else:
+                            lines.append(line)
+                    if not port_set:
+                        lines.append(f"Port {ssh_port}")
+                    _write_as_root(str(sshd_config), "\n".join(lines) + "\n")
+                    _sudo(["systemctl", "restart", "ssh"], check=False)
+                    console.print(f"  [green]✓[/green] SSH port set to [bold]{ssh_port}[/bold]")
 
-        _sudo(["chown", "-R", f"{user}:{user}", str(ssh_dir)])
-        _sudo(["chmod", "700", str(ssh_dir)])
-        _sudo(["chmod", "600", str(authorized)])
-        console.print(f"  [green]✓[/green] SSH public key injected for [bold]{user}[/bold]")
+        # Configure password authentication
+        sshd_config = Path("/etc/ssh/sshd_config")
+        if sshd_config.exists():
+            content = sshd_config.read_text()
+            auth_value = "yes" if password_auth else "no"
+            lines = []
+            for line in content.splitlines():
+                if line.startswith("#PasswordAuthentication ") or line.startswith("PasswordAuthentication "):
+                    lines.append(f"PasswordAuthentication {auth_value}")
+                else:
+                    lines.append(line)
+            _write_as_root(str(sshd_config), "\n".join(lines) + "\n")
+            console.print(f"  [green]✓[/green] SSH password auth: [bold]{auth_value}[/bold]")
+
+        # Inject SSH public key
+        if key:
+            ssh_dir = Path(f"/home/{user}/.ssh")
+            _sudo(["mkdir", "-p", str(ssh_dir)])
+            authorized = ssh_dir / "authorized_keys"
+
+            existing = ""
+            if authorized.exists():
+                existing = authorized.read_text()
+            if key not in existing:
+                _write_as_root(str(authorized), existing + "\n" + key + "\n")
+
+            _sudo(["chown", "-R", f"{user}:{user}", str(ssh_dir)])
+            _sudo(["chmod", "700", str(ssh_dir)])
+            _sudo(["chmod", "600", str(authorized)])
+            console.print(f"  [green]✓[/green] SSH public key injected for [bold]{user}[/bold]")
+
     except Exception as exc:
-        errors.append(f"ssh_key: {exc}")
+        errors.append(f"ssh: {exc}")
+
+
+def _apply_interfaces(config: dict, errors: list) -> None:
+    """Enable/disable hardware interfaces: I2C, SPI, Serial, Camera."""
+    interfaces = [
+        ("ENABLE_I2C", "i2c", "i2c_arm"),
+        ("ENABLE_SPI", "spi", "spi"),
+        ("ENABLE_SERIAL", "serial", "serial"),
+        ("ENABLE_CAMERA", "camera", "camera"),
+    ]
+    
+    for key, name, config_name in interfaces:
+        enable = config.get(key, "no").strip().lower() in ("yes", "true", "1")
+        if not enable:
+            continue
+        try:
+            # Use raspi-config for Raspberry Pi
+            _sudo(["raspi-config", "nonint", f"do_{name}", "0"], check=False)
+            console.print(f"  [green]✓[/green] {name.upper()} interface enabled")
+        except Exception as exc:
+            errors.append(f"{name}: {exc}")
+
+
+def _apply_network(config: dict, errors: list) -> None:
+    """Configure static IP if specified."""
+    static_ip = config.get("STATIC_IP", "").strip()
+    gateway = config.get("GATEWAY", "").strip()
+    dns = config.get("DNS_SERVERS", "8.8.8.8,8.8.4.4").strip()
+
+    if not static_ip:
+        return  # Use DHCP
+
+    try:
+        # Determine network interface
+        result = _run(["ip", "route"], check=False)
+        iface = "eth0"
+        for line in result.stdout.splitlines():
+            if "dev" in line and "wlan" not in line:
+                parts = line.split()
+                if "dev" in parts:
+                    iface = parts[parts.index("dev") + 1]
+                    break
+
+        # Create static IP configuration for dhcpcd
+        dhcpcd_conf = f"""
+# Static IP configuration (added by MeshPi)
+interface {iface}
+    static ip_address={static_ip}/24
+    static routers={gateway}
+    static domain_name_servers={dns.replace(',', ' ')}
+"""
+        _write_as_root("/etc/dhcpcd.conf", dhcpcd_conf)
+        console.print(f"  [green]✓[/green] Static IP configured: [bold]{static_ip}[/bold]")
+    except Exception as exc:
+        errors.append(f"network: {exc}")
 
 
 def _apply_locale_timezone(config: dict, errors: list) -> None:
