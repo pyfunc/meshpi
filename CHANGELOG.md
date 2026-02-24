@@ -1,3 +1,24 @@
+## [0.1.2] - 2026-02-24
+
+### Summary
+
+feat(goal): CLI interface improvements
+
+### Config
+
+- config: update goal.yaml
+
+### Other
+
+- update meshpi/applier.py
+- update meshpi/cli.py
+- update meshpi/client.py
+- update meshpi/config.py
+- update meshpi/crypto.py
+- update meshpi/host.py
+- update meshpi/pendrive.py
+
+
 ## [0.1.1] - 2026-02-24
 
 ### Summary
