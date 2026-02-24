@@ -64,6 +64,88 @@ meshpi scan      # Auto-discovers host, configures itself, reboots
 
 ---
 
+## 📱 Client Setup (Raspberry Pi)
+
+### 🔧 Prerequisites Setup
+
+Before running `meshpi scan` on your Raspberry Pi, follow these steps:
+
+#### 1. **Connect to Internet**
+```bash
+# Connect to WiFi using desktop interface or command line
+sudo raspi-config
+# Navigate to Network Options → Wi-Fi → Enter SSID and password
+```
+
+#### 2. **Update System**
+```bash
+# Update package lists and upgrade system packages
+sudo apt update && sudo apt upgrade -y
+
+# Reboot after updates
+sudo reboot
+```
+
+#### 3. **Install Python pip**
+```bash
+# Install pip if not already installed
+sudo apt install python3-pip python3-venv -y
+
+# Verify installation
+pip3 --version
+```
+
+#### 4. **Install MeshPi**
+```bash
+# Install MeshPi package
+pip3 install meshpi
+
+# Or with LLM support for natural language commands
+pip3 install "meshpi[llm]"
+```
+
+#### 5. **Run MeshPi Scan**
+```bash
+# Discover and connect to MeshPi host
+meshpi scan
+```
+
+### 🚀 One-Liner Installation
+
+For experienced users, here's the complete setup in one command:
+
+```bash
+sudo apt update && sudo apt upgrade -y && sudo apt install python3-pip -y && pip3 install meshpi && meshpi scan
+```
+
+### 📋 What Happens During Scan
+
+When you run `meshpi scan`, the client will:
+
+1. 🔍 **Discover Host** - Uses mDNS to find MeshPi hosts on your network
+2. 🔑 **Key Exchange** - Generates RSA key pair and exchanges with host
+3. 🔐 **Download Config** - Receives encrypted configuration
+4. ⚙️ **Apply Settings** - Configures WiFi, SSH, users, locale
+5. 🔄 **Reboot** - Restarts to apply all changes
+
+### 🛠️ Troubleshooting
+
+**No hosts found?**
+- Ensure host machine is running `meshpi host`
+- Check both devices are on the same network
+- Verify firewall allows mDNS (port 5353)
+
+**Installation issues?**
+```bash
+# Update pip to latest version
+pip3 install --upgrade pip
+
+# Install with specific version
+pip3 install meshpi==0.1.14
+```
+
+---
+
 ## ✨ Features
 
 ### 🔐 Encrypted Zero-Touch Provisioning

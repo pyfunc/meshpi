@@ -1,0 +1,144 @@
+# ─────────────────────────────────────────────────────────────────
+# Multi-architecture Docker Compose for RPi version testing
+#
+# Tests MeshPi installation across different RPi architectures:
+# - arm32v6 (RPi Zero, Zero W)
+# - arm32v7 (RPi 2, 3, Zero 2 W)  
+# - arm64v8 (RPi 4, 5)
+#
+# Usage:
+#   docker compose -f docker-compose.test-rpi.yml build
+#   docker compose -f docker-compose.test-rpi.yml up
+#   docker compose -f docker-compose.test-rpi.yml down
+# ─────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── RPi Zero/Zero W (arm32v6) ─────────────────────────────────────
+  meshpi-test-arm32v6:
+    build:
+      context: .
+      dockerfile: docker/test-rpi/Dockerfile
+      args:
+        BASE_IMAGE: arm32v6/python:3.11-slim-bullseye
+        PYTHON_VERSION: "3.11"
+        ARCH: "arm32v6"
+    image: meshpi-test-arm32v6:latest
+    container_name: meshpi-test-arm32v6
+    platform: linux/arm/v6
+    environment:
+      MESHPI_TEST_ARCH: "arm32v6"
+      MESHPI_TEST_RPI_MODEL: "zero"
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ./test-results:/app/test-results
+    networks:
+      - meshpi-test-net
+    command: >
+      bash -c "
+        echo '=== Testing RPi Zero (arm32v6) ===' &&
+        python --version &&
+        pip --version &&
+        python -c 'import platform; print(f\"Architecture: {platform.machine()}\")' &&
+        python -c 'import sys; print(f\"Platform: {sys.platform}\")' &&
+        python test-installation.py --arch arm32v6 --model zero
+      "
+
+  # ── RPi 2/3/Zero 2 W (arm32v7) ───────────────────────────────────
+  meshpi-test-arm32v7:
+    build:
+      context: .
+      dockerfile: docker/test-rpi/Dockerfile
+      args:
+        BASE_IMAGE: arm32v7/python:3.11-slim-bullseye
+        PYTHON_VERSION: "3.11"
+        ARCH: "arm32v7"
+    image: meshpi-test-arm32v7:latest
+    container_name: meshpi-test-arm32v7
+    platform: linux/arm/v7
+    environment:
+      MESHPI_TEST_ARCH: "arm32v7"
+      MESHPI_TEST_RPI_MODEL: "pi3"
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ./test-results:/app/test-results
+    networks:
+      - meshpi-test-net
+    command: >
+      bash -c "
+        echo '=== Testing RPi 3 (arm32v7) ===' &&
+        python --version &&
+        pip --version &&
+        python -c 'import platform; print(f\"Architecture: {platform.machine()}\")' &&
+        python -c 'import sys; print(f\"Platform: {sys.platform}\")' &&
+        python test-installation.py --arch arm32v7 --model pi3
+      "
+
+  # ── RPi 4/5 (arm64v8) ───────────────────────────────────────────
+  meshpi-test-arm64v8:
+    build:
+      context: .
+      dockerfile: docker/test-rpi/Dockerfile
+      args:
+        BASE_IMAGE: arm64v8/python:3.11-slim-bullseye
+        PYTHON_VERSION: "3.11"
+        ARCH: "arm64v8"
+    image: meshpi-test-arm64v8:latest
+    container_name: meshpi-test-arm64v8
+    platform: linux/arm64
+    environment:
+      MESHPI_TEST_ARCH: "arm64v8"
+      MESHPI_TEST_RPI_MODEL: "pi4"
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ./test-results:/app/test-results
+    networks:
+      - meshpi-test-net
+    command: >
+      bash -c "
+        echo '=== Testing RPi 4 (arm64v8) ===' &&
+        python --version &&
+        pip --version &&
+        python -c 'import platform; print(f\"Architecture: {platform.machine()}\")' &&
+        python -c 'import sys; print(f\"Platform: {sys.platform}\")' &&
+        python test-installation.py --arch arm64v8 --model pi4
+      "
+
+  # ── Test Results Aggregator ───────────────────────────────────────
+  meshpi-test-aggregator:
+    build:
+      context: .
+      dockerfile: docker/test-rpi/Dockerfile
+      args:
+        BASE_IMAGE: python:3.11-slim-bullseye
+        PYTHON_VERSION: "3.11"
+        ARCH: "x86_64"
+    image: meshpi-test-aggregator:latest
+    container_name: meshpi-test-aggregator
+    volumes:
+      - ./test-results:/app/test-results
+    networks:
+      - meshpi-test-net
+    depends_on:
+      - meshpi-test-arm32v6
+      - meshpi-test-arm32v7
+      - meshpi-test-arm64v8
+    command: >
+      bash -c "
+        echo '=== Aggregating Test Results ===' &&
+        ls -la test-results/ &&
+        python aggregate-results.py
+      "
+    profiles:
+      - aggregate
+
+networks:
+  meshpi-test-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.29.0.0/16
+
+volumes:
+  test-results:
+    driver: local

@@ -1,3 +1,31 @@
+## [0.1.15] - 2026-02-24
+
+### Summary
+
+feat(tests): configuration management system
+
+### Docs
+
+- docs: update README
+- docs: update RPI-TESTING-README.md
+- docs: update RPI-TEST-RESULTS.md
+- docs: update RPI-TESTING.md
+
+### Ci
+
+- config: update test-rpi-arch.yml
+
+### Other
+
+- config: update docker-compose.test-rpi.yml
+- docker: update Dockerfile
+- update docker/test-rpi/aggregate-results.py
+- update docker/test-rpi/test-installation.py
+- update docker/test-rpi/test-utils.py
+- scripts: update remote-rpi-test.sh
+- scripts: update run-rpi-tests.sh
+
+
 ## [0.1.14] - 2026-02-24
 
 ### Summary

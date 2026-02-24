@@ -1,0 +1,435 @@
+name: Multi-Architecture RPi Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'meshpi/**'
+      - 'pyproject.toml'
+      - 'docker/test-rpi/**'
+      - 'docker-compose.test-rpi.yml'
+      - 'run-rpi-tests.sh'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'meshpi/**'
+      - 'pyproject.toml'
+      - 'docker/test-rpi/**'
+      - 'docker-compose.test-rpi.yml'
+      - 'run-rpi-tests.sh'
+  workflow_dispatch:
+    inputs:
+      arch_filter:
+        description: 'Test specific architecture only'
+        required: false
+        default: ''
+        type: choice
+        options:
+          - ''
+          - 'arm32v6'
+          - 'arm32v7'
+          - 'arm64v8'
+      quick_mode:
+        description: 'Quick mode (skip builds)'
+        required: false
+        default: false
+        type: boolean
+      clean_build:
+        description: 'Clean build existing images'
+        required: false
+        default: true
+        type: boolean
+
+env:
+  DOCKER_BUILDKIT: 1
+  COMPOSE_DOCKER_CLI_BUILD: 1
+
+jobs:
+  # Setup and build job
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run_arm32v6: ${{ steps.decide.outputs.should_run_arm32v6 }}
+      should_run_arm32v7: ${{ steps.decide.outputs.should_run_arm32v7 }}
+      should_run_arm64v8: ${{ steps.decide.outputs.should_run_arm64v8 }}
+      matrix_json: ${{ steps.decide.outputs.matrix_json }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Decide which architectures to test
+      id: decide
+      run: |
+        # Determine which architectures to test based on input
+        ARCH_FILTER="${{ github.event.inputs.arch_filter || '' }}"
+        
+        if [ -n "$ARCH_FILTER" ]; then
+          echo "Testing only architecture: $ARCH_FILTER"
+          echo "should_run_arm32v6=$([ "$ARCH_FILTER" = "arm32v6" ] && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "should_run_arm32v7=$([ "$ARCH_FILTER" = "arm32v7" ] && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "should_run_arm64v8=$([ "$ARCH_FILTER" = "arm64v8" ] && echo true || echo false)" >> $GITHUB_OUTPUT
+        else
+          echo "Testing all architectures"
+          echo "should_run_arm32v6=true" >> $GITHUB_OUTPUT
+          echo "should_run_arm32v7=true" >> $GITHUB_OUTPUT
+          echo "should_run_arm64v8=true" >> $GITHUB_OUTPUT
+        fi
+        
+        # Create matrix JSON for conditional jobs
+        cat << 'EOF' > matrix.json
+        {
+          "include": [
+            {"arch": "arm32v6", "model": "zero", "platform": "linux/arm/v6"},
+            {"arch": "arm32v7", "model": "pi3", "platform": "linux/arm/v7"},
+            {"arch": "arm64v8", "model": "pi4", "platform": "linux/arm64"}
+          ]
+        }
+        EOF
+        
+        # Filter matrix if architecture filter is set
+        if [ -n "$ARCH_FILTER" ]; then
+          jq --arg arch "$ARCH_FILTER" 'select(.arch == $arch)' matrix.json > filtered.json
+          mv filtered.json matrix.json
+        fi
+        
+        echo "matrix_json=$(cat matrix.json | jq -c .)" >> $GITHUB_OUTPUT
+
+  # arm32v6 (RPi Zero/Zero W) tests
+  test-arm32v6:
+    needs: setup
+    if: needs.setup.outputs.should_run_arm32v6 == 'true'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+      with:
+        platforms: arm/v6
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Create test results directory
+      run: mkdir -p test-results
+    
+    - name: Build and test arm32v6
+      run: |
+        # Set environment variables
+        export ARCH_FILTER="arm32v6"
+        export QUICK_MODE="${{ github.event.inputs.quick_mode || 'false' }}"
+        export CLEAN_BUILD="${{ github.event.inputs.clean_build || 'true' }}"
+        
+        # Run the test script
+        ./run-rpi-tests.sh --arch arm32v6 --clean
+    
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results-arm32v6
+        path: test-results/
+        retention-days: 30
+    
+    - name: Upload Docker logs
+      uses: actions/upload-artifact@v4
+      if: failure()
+      with:
+        name: docker-logs-arm32v6
+        path: |
+          /var/log/docker.log
+          ~/.docker/containers/**/*.log
+        retention-days: 7
+
+  # arm32v7 (RPi 2/3/Zero 2 W) tests  
+  test-arm32v7:
+    needs: setup
+    if: needs.setup.outputs.should_run_arm32v7 == 'true'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+      with:
+        platforms: arm/v7
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Create test results directory
+      run: mkdir -p test-results
+    
+    - name: Build and test arm32v7
+      run: |
+        # Set environment variables
+        export ARCH_FILTER="arm32v7"
+        export QUICK_MODE="${{ github.event.inputs.quick_mode || 'false' }}"
+        export CLEAN_BUILD="${{ github.event.inputs.clean_build || 'true' }}"
+        
+        # Run the test script
+        ./run-rpi-tests.sh --arch arm32v7 --clean
+    
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results-arm32v7
+        path: test-results/
+        retention-days: 30
+    
+    - name: Upload Docker logs
+      uses: actions/upload-artifact@v4
+      if: failure()
+      with:
+        name: docker-logs-arm32v7
+        path: |
+          /var/log/docker.log
+          ~/.docker/containers/**/*.log
+        retention-days: 7
+
+  # arm64v8 (RPi 4/5) tests
+  test-arm64v8:
+    needs: setup
+    if: needs.setup.outputs.should_run_arm64v8 == 'true'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+      with:
+        platforms: arm64
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Create test results directory
+      run: mkdir -p test-results
+    
+    - name: Build and test arm64v8
+      run: |
+        # Set environment variables
+        export ARCH_FILTER="arm64v8"
+        export QUICK_MODE="${{ github.event.inputs.quick_mode || 'false' }}"
+        export CLEAN_BUILD="${{ github.event.inputs.clean_build || 'true' }}"
+        
+        # Run the test script
+        ./run-rpi-tests.sh --arch arm64v8 --clean
+    
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results-arm64v8
+        path: test-results/
+        retention-days: 30
+    
+    - name: Upload Docker logs
+      uses: actions/upload-artifact@v4
+      if: failure()
+      with:
+        name: docker-logs-arm64v8
+        path: |
+          /var/log/docker.log
+          ~/.docker/containers/**/*.log
+        retention-days: 7
+
+  # Aggregate results and create summary
+  aggregate-results:
+    needs: [setup, test-arm32v6, test-arm32v7, test-arm64v8]
+    if: always() && (needs.test-arm32v6.result == 'success' || needs.test-arm32v6.result == 'skipped') && (needs.test-arm32v7.result == 'success' || needs.test-arm32v7.result == 'skipped') && (needs.test-arm64v8.result == 'success' || needs.test-arm64v8.result == 'skipped')
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Download all test results
+      uses: actions/download-artifact@v4
+      with:
+        pattern: test-results-*
+        merge-multiple: true
+        path: test-results
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        pip install --upgrade pip
+        pip install jq
+    
+    - name: Aggregate results
+      run: |
+        # Copy aggregation script
+        cp docker/test-rpi/aggregate-results.py .
+        
+        # Run aggregation
+        python aggregate-results.py --results-dir test-results
+        
+        # Display summary
+        if [ -f test-results/test-summary.json ]; then
+          echo "## Test Results Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Overall status
+          OVERALL_STATUS=$(jq -r '.overall_status' test-results/test-summary.json)
+          TOTAL_TESTS=$(jq -r '.total_tests' test-results/test-summary.json)
+          echo "**Overall Status:** $OVERALL_STATUS" >> $GITHUB_STEP_SUMMARY
+          echo "**Total Tests:** $TOTAL_TESTS" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Architecture results
+          echo "### Architecture Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          jq -r '.architectures | to_entries[] | 
+            "**\(.key | ascii_upcase):** \(.value.status) (\(.value.passed)/\(.value.passed + .value.failed) tests passed)"' \
+            test-results/test-summary.json >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Issues (if any)
+          ISSUES_COUNT=$(jq '.issues | length' test-results/test-summary.json)
+          if [ "$ISSUES_COUNT" -gt 0 ]; then
+            echo "### Issues Found ($ISSUES_COUNT)" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            jq -r '.issues[:5] | to_entries[] | 
+              "**\(.value.architecture) (\(.value.model))** - \(.value.test): \(.value.error // .value.exception // "Unknown error")"' \
+              test-results/test-summary.json >> $GITHUB_STEP_SUMMARY
+            if [ "$ISSUES_COUNT" -gt 5 ]; then
+              echo "... and $((ISSUES_COUNT - 5)) more issues" >> $GITHUB_STEP_SUMMARY
+            fi
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Recommendations
+          RECS_COUNT=$(jq '.recommendations | length' test-results/test-summary.json)
+          if [ "$RECS_COUNT" -gt 0 ]; then
+            echo "### Recommendations" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            jq -r '.recommendations[] | "- \(.message)"' test-results/test-summary.json >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+        fi
+    
+    - name: Upload aggregated results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: aggregated-test-results
+        path: |
+          test-results/test-summary.json
+          test-results/test-report-*.md
+        retention-days: 30
+    
+    - name: Comment PR with results
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          
+          try {
+            const summaryPath = 'test-results/test-summary.json';
+            if (fs.existsSync(summaryPath)) {
+              const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
+              
+              let comment = `## 🧪 RPi Architecture Test Results\n\n`;
+              comment += `**Overall Status:** ${summary.overall_status}\n`;
+              comment += `**Total Tests:** ${summary.total_tests}\n\n`;
+              
+              comment += `### Architecture Results\n\n`;
+              for (const [arch, data] of Object.entries(summary.architectures)) {
+                const status = data.status === 'passed' ? '✅' : data.status === 'failed' ? '❌' : '⚠️';
+                comment += `${status} **${arch.toUpperCase()}:** ${data.passed}/${data.passed + data.failed} tests passed\n`;
+              }
+              
+              if (summary.issues && summary.issues.length > 0) {
+                comment += `\n### Issues Found (${summary.issues.length})\n\n`;
+                summary.issues.slice(0, 3).forEach(issue => {
+                  comment += `- **${issue.architecture} (${issue.model})** - ${issue.test}: ${issue.error || issue.exception || 'Unknown error'}\n`;
+                });
+                if (summary.issues.length > 3) {
+                  comment += `- ... and ${summary.issues.length - 3} more issues\n`;
+                }
+              }
+              
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment
+              });
+            }
+          } catch (error) {
+            console.log('Error creating PR comment:', error);
+          }
+
+  # Performance benchmark job (optional)
+  benchmark:
+    needs: setup
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.quick_mode == 'false'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+      with:
+        platforms: arm/v6,arm/v7,arm64
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Run performance benchmarks
+      run: |
+        echo "Running performance benchmarks..."
+        mkdir -p test-results
+        
+        # Benchmark installation times for each architecture
+        for arch in arm32v6 arm32v7 arm64v8; do
+          echo "Benchmarking $arch..."
+          timeout 1800 docker-compose -f docker-compose.test-rpi.yml run --rm meshpi-test-$arch \
+            python -c "
+import time
+import subprocess
+import json
+
+start = time.time()
+result = subprocess.run([sys.executable, '-m', 'pip', 'install', 'meshpi'], 
+                       capture_output=True, text=True, timeout=600)
+end = time.time()
+
+benchmark = {
+    'architecture': '$arch',
+    'installation_time': end - start,
+    'success': result.returncode == 0,
+    'stdout': result.stdout,
+    'stderr': result.stderr
+}
+
+print(json.dumps(benchmark, indent=2))
+" > test-results/benchmark-$arch.json || echo "Benchmark $arch failed"
+        done
+    
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: benchmark-results
+        path: test-results/benchmark-*.json
+        retention-days: 30
