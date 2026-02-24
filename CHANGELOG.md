@@ -1,3 +1,14 @@
+## [0.1.28] - 2026-02-24
+
+### Summary
+
+refactor(meshpi): core module improvements
+
+### Other
+
+- update meshpi/audit.py
+
+
 ## [0.1.27] - 2026-02-24
 
 ### Summary
