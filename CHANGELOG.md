@@ -1,3 +1,14 @@
+## [0.1.30] - 2026-02-24
+
+### Summary
+
+feat(meshpi): configuration management system
+
+### Other
+
+- update meshpi/host.py
+
+
 ## [0.1.29] - 2026-02-24
 
 ### Summary

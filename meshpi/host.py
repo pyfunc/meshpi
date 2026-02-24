@@ -130,6 +130,10 @@ ws_manager = WebSocketManager()
 app = FastAPI(title="MeshPi Host", version="0.2.0", docs_url="/docs", redoc_url=None)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
+# Include monitoring routes (audit, alerts, ota, metrics)
+from meshpi.api.monitoring import router as monitoring_router
+app.include_router(monitoring_router)
+
 _host_private_key = None
 _host_public_key = None
 _config: Optional[dict] = None
