@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "meshpi"
+version = "0.1.1"
+description = "Zero-touch Raspberry Pi mesh configuration tool"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "Apache-2.0"
+authors = [
+    { name = "Softreck", email = "info@softreck.dev" },
+    "Tom Sapletta <tom@sapletta.com>",
+]
+keywords = ["raspberry-pi", "mesh", "configuration", "iot", "automation"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Topic :: System :: Systems Administration",
+    "Topic :: System :: Networking",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "cryptography>=41.0",
+    "click>=8.1",
+    "httpx>=0.26",
+    "zeroconf>=0.131",
+    "python-dotenv>=1.0",
+    "rich>=13.0",
+    "paramiko>=3.4",
+    "pydantic>=2.5",
+    "uvicorn>=0.27",
+    "fastapi>=0.109",
+]
+
+[project.scripts]
+meshpi = "meshpi.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/softreck/meshpi"
+Repository = "https://github.com/softreck/meshpi"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["meshpi*"]
