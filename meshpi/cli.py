@@ -2138,26 +2138,36 @@ def identify_device_type_quick(device) -> str:
     
     try:
         manager = SSHManager()
+
+        network_cidr, gateway_ip = manager.detect_primary_network()
+        if gateway_ip and getattr(device, "host", None) == gateway_ip:
+            return "Router/Gateway"
+
+        neighbors = manager.ip_neighbors()
+        mac = neighbors.get(getattr(device, "host", ""))
+        vendor = manager.mac_vendor(mac) or ""
+        vendor_l = vendor.lower()
+        if "raspberry" in vendor_l or "raspberry pi" in vendor_l:
+            return "Raspberry Pi (by OUI)"
+
         if manager.connect_to_device(device):
-            # Quick checks for device type
             checks = [
-                ("Raspberry Pi", "cat /proc/device-tree/model 2>/dev/null | grep -i raspberry"),
-                ("Router/Gateway", "ip route show default | grep -q 'via.*192.168.188.1'"),
+                ("Raspberry Pi", "cat /proc/device-tree/model 2>/dev/null | grep -i 'raspberry pi'"),
                 ("Linux", "uname -s | grep -q Linux"),
-                ("ARM", "uname -m | grep -q arm")
+                ("ARM", "uname -m | grep -q -E 'arm|aarch64'"),
             ]
-            
+
             for device_type, cmd in checks:
                 exit_code, _, _ = manager.run_command_on_device(device, cmd)
                 if exit_code == 0:
                     manager.disconnect_device(device)
                     return device_type
-            
+
             manager.disconnect_device(device)
-            
+             
     except Exception:
         pass
-    
+     
     return "Unknown"
 
 
@@ -2190,19 +2200,11 @@ def cmd_ssh_scan(network: Optional[str], user: str, port: int, timeout: int, add
     # Auto-detect network if not specified
     if network is None:
         try:
-            # Get local IP by connecting to a remote address
-            import socket
-            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-                s.connect(("8.8.8.8", 80))
-                local_ip = s.getsockname()[0]
-            
-            # Use conservative /24 approach for SSH scan
-            if '.' in local_ip and (local_ip.startswith('192.168.') or local_ip.startswith('10.') or local_ip.startswith('172.')):
-                parts = local_ip.split('.')
-                network = f"{parts[0]}.{parts[1]}.{parts[2]}.0/24"
+            primary_net, _gateway = SSHManager.detect_primary_network()
+            if primary_net:
+                network = primary_net
             else:
                 network = "192.168.1.0/24"  # fallback
-            
             console.print(f"[dim]Auto-detected network: {network}[/dim]")
         except:
             network = "192.168.1.0/24"  # fallback
@@ -2282,11 +2284,24 @@ def cmd_ssh_scan(network: Optional[str], user: str, port: int, timeout: int, add
     table.add_column("User", style="dim")
     table.add_column("Port", style="dim")
     table.add_column("Type", style="dim")
+    table.add_column("Vendor", style="dim")
+    table.add_column("MAC", style="dim")
     
+    neighbors = manager.ip_neighbors()
+    _net, gateway_ip = manager.detect_primary_network()
     for device in devices:
         # Try to identify device type
         device_type = identify_device_type_quick(device)
-        table.add_row(device.host, device.user, str(device.port), device_type)
+        mac = neighbors.get(device.host)
+        vendor = manager.mac_vendor(mac) or "—"
+
+        if gateway_ip and device.host == gateway_ip:
+            device_type = "Router/Gateway"
+
+        device.meta["mac"] = mac
+        device.meta["vendor"] = vendor if vendor != "—" else None
+        device.meta["type"] = device_type
+        table.add_row(device.host, device.user, str(device.port), device_type, vendor, mac or "—")
     
     console.print(table)
     
@@ -2298,1364 +2313,136 @@ def cmd_ssh_scan(network: Optional[str], user: str, port: int, timeout: int, add
         manager.save_device_list(str(Path.home() / ".meshpi" / "ssh_devices.json"))
 
 
-@cmd_ssh.command("add")
-@click.argument("target")
-@click.option("--name", help="Device name for identification")
-@click.option("--tags", help="Comma-separated tags")
-def cmd_ssh_add(target: str, name: Optional[str], tags: Optional[str]):
-    """Add SSH device to management."""
-    from .ssh_manager import SSHManager, SSHDevice, parse_device_target
-    
-    user, host, port = parse_device_target(target)
-    device = SSHDevice(host, user, port, name, tags.split(",") if tags else [])
-    
-    manager = SSHManager()
-    manager.add_device(device)
-    manager.save_device_list(str(Path.home() / ".meshpi" / "ssh_devices.json"))
-
-
-@cmd_ssh.command("list")
-@click.option("--refresh", is_flag=True, default=False, help="Refresh device information")
-def cmd_ssh_list(refresh: bool):
-    """List managed SSH devices."""
+@cmd_ssh.command("prune")
+@click.option("--file", "devices_file", default=None, help="Path to ssh_devices.json (default: ~/.meshpi/ssh_devices.json)")
+@click.option("--unreachable", is_flag=True, default=True, help="Remove devices that are not reachable on TCP port")
+@click.option("--non-rpi", is_flag=True, default=False, help="Remove devices that are clearly not Raspberry Pi")
+@click.option("--dry-run", is_flag=True, default=False, help="Show what would be removed without writing")
+@click.option("--timeout", default=1.5, help="TCP connect timeout seconds")
+def cmd_ssh_prune(devices_file: Optional[str], unreachable: bool, non_rpi: bool, dry_run: bool, timeout: float):
+    """Remove inactive / mismatching devices from managed SSH list."""
     from .ssh_manager import SSHManager
     from pathlib import Path
-    
+    import socket
+
     manager = SSHManager()
-    devices_file = Path.home() / ".meshpi" / "ssh_devices.json"
-    
-    if devices_file.exists():
-        manager.load_device_list(str(devices_file))
-    
+    path = Path(devices_file) if devices_file else (Path.home() / ".meshpi" / "ssh_devices.json")
+    if path.exists():
+        manager.load_device_list(str(path))
+
     if not manager.devices:
-        console.print("[yellow]No devices managed yet[/yellow]")
-        console.print("[dim]Use 'meshpi ssh add' or 'meshpi ssh scan --add' to add devices[/dim]")
+        console.print("[yellow]No managed SSH devices[/yellow]")
         return
-    
-    manager.list_devices_table()
 
+    _net, gateway_ip = manager.detect_primary_network()
 
-@cmd_ssh.command("connect")
-@click.argument("target", required=False)
-@click.option("--password", is_flag=True, default=False, help="Use password authentication")
-@click.option("--key", help="Path to SSH private key")
-@click.option("--all", is_flag=True, default=False, help="Connect to all devices")
-def cmd_ssh_connect(target: Optional[str], password: bool, key: Optional[str], all: bool):
-    """Connect to SSH device(s)."""
-    from .ssh_manager import SSHManager, SSHDevice, parse_device_target
-    from pathlib import Path
-    import getpass
-    
-    manager = SSHManager()
-    devices_file = Path.home() / ".meshpi" / "ssh_devices.json"
-    
-    if devices_file.exists():
-        manager.load_device_list(str(devices_file))
-    
-    if all:
-        devices_to_connect = manager.devices
-    elif target:
-        user, host, port = parse_device_target(target)
-        device = SSHDevice(host, user, port)
-        devices_to_connect = [device]
-    else:
-        console.print("[red]Error: Specify target or use --all[/red]")
-        return
-    
-    ssh_password = None
-    if password:
-        ssh_password = getpass.getpass("Enter SSH password: ")
-    
-    connected_count = 0
-    for device in devices_to_connect:
-        console.print(f"[cyan]→[/cyan] Connecting to {device}...")
-        if manager.connect_to_device(device, password=ssh_password, key_path=key):
-            console.print(f"[green]✓ Connected to {device}[/green]")
-            connected_count += 1
-        else:
-            console.print(f"[red]✗ Failed to connect to {device}[/red]")
-    
-    console.print(f"\n[green]Connected to {connected_count}/{len(devices_to_connect)} devices[/green]")
-    
-    # Show device info for connected devices
-    if connected_count > 0:
-        console.print("\n[bold]Device Information:[/bold]")
-        for device in devices_to_connect:
-            if device._connected:
-                info = manager.get_device_info(device)
-                console.print(f"\n[bold]{device}[/bold]")
-                console.print(f"  Hostname: {info.get('hostname', 'N/A')}")
-                console.print(f"  Uptime: {info.get('uptime', 'N/A')}")
-                console.print(f"  CPU Temp: {info.get('cpu_temp', 'N/A')}")
-                console.print(f"  MeshPi: {info.get('meshpi_version', 'N/A')}")
-        
-        # Keep connections open for interactive use
-        console.print("\n[dim]Connections active. Press Ctrl+C to disconnect.[/dim]")
+    def is_reachable(host: str, port: int) -> bool:
         try:
-            import time
-            while True:
-                time.sleep(1)
-        except KeyboardInterrupt:
-            console.print("\n[yellow]Disconnecting...[/yellow]")
-            for device in devices_to_connect:
-                manager.disconnect_device(device)
-            console.print("[green]✓ All devices disconnected[/green]")
+            with socket.create_connection((host, port), timeout=timeout):
+                return True
+        except Exception:
+            return False
 
+    to_keep = []
+    removed = []
+    for dev in manager.devices:
+        reason = None
+        if unreachable and not is_reachable(dev.host, dev.port):
+            reason = "unreachable"
 
-@cmd_ssh.command("exec")
-@click.argument("command")
-@click.option("--target", help="Specific device (user@host:port)")
-@click.option("--parallel", is_flag=True, default=True, help="Run in parallel")
-def cmd_ssh_exec(command: str, target: Optional[str], parallel: bool):
-    """Execute command on SSH device(s)."""
-    from .ssh_manager import SSHManager, parse_device_target
-    from pathlib import Path
-    
-    manager = SSHManager()
-    devices_file = Path.home() / ".meshpi" / "ssh_devices.json"
-    
-    if devices_file.exists():
-        manager.load_device_list(str(devices_file))
-    
-    # Filter devices if target specified
-    if target:
-        user, host, port = parse_device_target(target)
-        manager.devices = [d for d in manager.devices if d.host == host and d.user == user and d.port == port]
-    
-    if not manager.devices:
-        console.print("[red]No devices available[/red]")
+        if reason is None and non_rpi:
+            dtype = str(dev.meta.get("type", "")).lower()
+            vendor = str(dev.meta.get("vendor", "")).lower()
+            if dev.host == gateway_ip:
+                reason = "gateway"
+            elif "router" in dtype or "gateway" in dtype:
+                reason = "router"
+            elif vendor and "raspberry" not in vendor and "raspberry pi" not in vendor and "rpi" not in dtype:
+                reason = "non_rpi"
+
+        if reason:
+            removed.append((dev, reason))
+        else:
+            to_keep.append(dev)
+
+    if removed:
+        table = Table(title="Prune candidates", border_style="yellow")
+        table.add_column("Host")
+        table.add_column("User")
+        table.add_column("Port")
+        table.add_column("Reason")
+        for dev, reason in removed:
+            table.add_row(dev.host, dev.user, str(dev.port), reason)
+        console.print(table)
+    else:
+        console.print("[green]Nothing to prune[/green]")
         return
-    
-    # Connect to all devices
-    console.print("[cyan]→[/cyan] Connecting to devices...")
-    for device in manager.devices:
-        manager.connect_to_device(device)
-    
-    # Execute command
-    console.print(f"[cyan]→[/cyan] Executing: [bold]{command}[/bold]")
-    results = manager.run_command_on_all(command, parallel=parallel)
-    
-    # Display results
-    table = Table(title="Command Results", border_style="cyan")
-    table.add_column("Device", style="bold")
-    table.add_column("Exit Code", style="dim")
-    table.add_column("Output")
-    table.add_column("Error", style="red")
-    
-    for device, (exit_code, stdout, stderr) in results.items():
-        exit_status = "[green]0[/green]" if exit_code == 0 else f"[red]{exit_code}[/red]"
-        output = stdout[:100] + "..." if len(stdout) > 100 else stdout
-        error = stderr[:50] + "..." if len(stderr) > 50 else stderr
-        
-        table.add_row(str(device), exit_status, output, error)
-    
-    console.print(table)
-    
-    # Disconnect
-    for device in manager.devices:
-        manager.disconnect_device(device)
 
-
-@cmd_ssh.command("install")
-@click.option("--target", help="Specific device (user@host:port)")
-@click.option("--method", default="pip", type=click.Choice(["pip", "venv"]), help="Installation method")
-def cmd_ssh_install(target: Optional[str], method: str):
-    """Install MeshPi on SSH device(s)."""
-    from .ssh_manager import SSHManager, parse_device_target
-    from pathlib import Path
-    
-    manager = SSHManager()
-    devices_file = Path.home() / ".meshpi" / "ssh_devices.json"
-    
-    if devices_file.exists():
-        manager.load_device_list(str(devices_file))
-    
-    # Filter devices if target specified
-    if target:
-        user, host, port = parse_device_target(target)
-        manager.devices = [d for d in manager.devices if d.host == host and d.user == user and d.port == port]
-    
-    if not manager.devices:
-        console.print("[red]No devices available[/red]")
-        return
-    
-    # Connect and install
-    for device in manager.devices:
-        if manager.connect_to_device(device):
-            manager.install_meshpi_on_device(device, method)
-            manager.disconnect_device(device)
-
-
-@cmd_ssh.command("update")
-@click.option("--target", help="Specific device (user@host:port)")
-def cmd_ssh_update(target: Optional[str]):
-    """Update MeshPi on SSH device(s)."""
-    from .ssh_manager import SSHManager, parse_device_target
-    from pathlib import Path
-    
-    manager = SSHManager()
-    devices_file = Path.home() / ".meshpi" / "ssh_devices.json"
-    
-    if devices_file.exists():
-        manager.load_device_list(str(devices_file))
-    
-    # Filter devices if target specified
-    if target:
-        user, host, port = parse_device_target(target)
-        manager.devices = [d for d in manager.devices if d.host == host and d.user == user and d.port == port]
-    
-    if not manager.devices:
-        console.print("[red]No devices available[/red]")
-        return
-    
-    # Connect and update
-    for device in manager.devices:
-        if manager.connect_to_device(device):
-            manager.update_meshpi_on_device(device)
-            manager.disconnect_device(device)
-
-
-@cmd_ssh.command("restart")
-@click.option("--target", help="Specific device (user@host:port)")
-@click.option("--service", default="meshpi-daemon", help="Service name to restart")
-def cmd_ssh_restart(target: Optional[str], service: str):
-    """Restart MeshPi service on SSH device(s)."""
-    from .ssh_manager import SSHManager, parse_device_target
-    from pathlib import Path
-    
-    manager = SSHManager()
-    devices_file = Path.home() / ".meshpi" / "ssh_devices.json"
-    
-    if devices_file.exists():
-        manager.load_device_list(str(devices_file))
-    
-    # Filter devices if target specified
-    if target:
-        user, host, port = parse_device_target(target)
-        manager.devices = [d for d in manager.devices if d.host == host and d.user == user and d.port == port]
-    
-    if not manager.devices:
-        console.print("[red]No devices available[/red]")
-        return
-    
-    # Connect and restart
-    for device in manager.devices:
-        if manager.connect_to_device(device):
-            manager.restart_meshpi_on_device(device, service)
-            manager.disconnect_device(device)
-
-
-@cmd_ssh.command("shell")
-@click.argument("target")
-@click.option("--password", is_flag=True, default=False, help="Use password authentication")
-@click.option("--key", help="Path to SSH private key")
-def cmd_ssh_shell(target: str, password: bool, key: Optional[str]):
-    """Open interactive SSH shell to device."""
-    from .ssh_manager import parse_device_target
-    import getpass
-    
-    user, host, port = parse_device_target(target)
-    
-    console.print(Panel.fit(
-        f"[bold cyan]SSH Shell Access[/bold cyan]\n"
-        f"Connecting to [bold]{user}@{host}:{port}[/bold]\n"
-        f"[dim]Type 'exit' to return to MeshPi[/dim]",
-        border_style="cyan"
-    ))
-    
-    # Build SSH command
-    ssh_cmd = ["ssh"]
-    
-    if key:
-        ssh_cmd.extend(["-i", key])
-    elif not password:
-        # Try default key
-        default_key = Path.home() / ".ssh" / "id_rsa"
-        if default_key.exists():
-            ssh_cmd.extend(["-i", str(default_key)])
-    
-    ssh_cmd.extend(["-p", str(port), f"{user}@{host}"])
-    
-    try:
-        console.print(f"[cyan]→ Launching SSH shell...[/cyan]")
-        console.print("[dim]Use 'exit' to return to MeshPi[/dim]\n")
-        
-        # Launch SSH shell
-        subprocess.run(ssh_cmd, check=True)
-        
-        console.print("\n[green]✓ Returned from SSH shell[/green]")
-        
-    except subprocess.CalledProcessError as e:
-        console.print(f"[red]✗ SSH connection failed: {e}[/red]")
-        
-        if not password and Confirm.ask("Try with password authentication?", default=False):
-            try:
-                ssh_password = getpass.getpass(f"Enter SSH password for {user}@{host}: ")
-                
-                # Use sshpass if available
-                ssh_pass_cmd = ["sshpass", "-p", ssh_password] + ssh_cmd
-                
-                try:
-                    subprocess.run(ssh_pass_cmd, check=True)
-                    console.print("\n[green]✓ Returned from SSH shell[/green]")
-                except FileNotFoundError:
-                    console.print("[yellow]sshpass not available. Install with: sudo apt install sshpass[/yellow]")
-                    console.print(f"[dim]Manual command: ssh {user}@{host}[/dim]")
-                except subprocess.CalledProcessError:
-                    console.print("[red]✗ Password authentication failed[/red]")
-                    
-            except Exception as e:
-                console.print(f"[red]✗ Password authentication failed: {e}[/red]")
-    
-    except KeyboardInterrupt:
-        console.print("\n[yellow]SSH session interrupted[/yellow]")
-
-
-@cmd_ssh.command("system-update")
-@click.option("--target", help="Specific device (user@host:port)")
-@click.option("--parallel", is_flag=True, default=True, help="Run in parallel")
-def cmd_ssh_system_update(target: Optional[str], parallel: bool):
-    """Update package lists on SSH device(s)."""
-    from .ssh_manager import SSHManager, parse_device_target
-    from pathlib import Path
-    
-    manager = SSHManager()
-    devices_file = Path.home() / ".meshpi" / "ssh_devices.json"
-    
-    if devices_file.exists():
-        manager.load_device_list(str(devices_file))
-    
-    # Filter devices if target specified
-    if target:
-        user, host, port = parse_device_target(target)
-        manager.devices = [d for d in manager.devices if d.host == host and d.user == user and d.port == port]
-    
-    if not manager.devices:
-        console.print("[red]No devices available[/red]")
-        return
-    
-    # Connect to all devices
-    console.print("[cyan]→[/cyan] Connecting to devices...")
-    for device in manager.devices:
-        manager.connect_to_device(device)
-    
-    # Execute system update
-    console.print(f"[cyan]→[/cyan] Updating package lists on devices...")
-    results = manager.run_command_on_all("sudo apt update", parallel=parallel)
-    
-    # Display results
-    table = Table(title="System Update Results", border_style="cyan")
-    table.add_column("Device", style="bold")
-    table.add_column("Exit Code", style="dim")
-    table.add_column("Output")
-    table.add_column("Error", style="red")
-    
-    for device, (exit_code, stdout, stderr) in results.items():
-        exit_status = "[green]0[/green]" if exit_code == 0 else f"[red]{exit_code}[/red]"
-        output = stdout[:150] + "..." if len(stdout) > 150 else stdout
-        error = stderr[:100] + "..." if len(stderr) > 100 else stderr
-        
-        table.add_row(str(device), exit_status, output, error)
-    
-    console.print(table)
-    
-    # Disconnect
-    for device in manager.devices:
-        manager.disconnect_device(device)
-
-
-@cmd_ssh.command("system-upgrade")
-@click.option("--target", help="Specific device (user@host:port)")
-@click.option("--parallel", is_flag=True, default=True, help="Run in parallel")
-@click.option("--safe", is_flag=True, default=False, help="Safe upgrade (avoid removing packages)")
-def cmd_ssh_system_upgrade(target: Optional[str], parallel: bool, safe: bool):
-    """Upgrade packages on SSH device(s)."""
-    from .ssh_manager import SSHManager, parse_device_target
-    from pathlib import Path
-    
-    manager = SSHManager()
-    devices_file = Path.home() / ".meshpi" / "ssh_devices.json"
-    
-    if devices_file.exists():
-        manager.load_device_list(str(devices_file))
-    
-    # Filter devices if target specified
-    if target:
-        user, host, port = parse_device_target(target)
-        manager.devices = [d for d in manager.devices if d.host == host and d.user == user and d.port == port]
-    
-    if not manager.devices:
-        console.print("[red]No devices available[/red]")
-        return
-    
-    # Confirm operation
-    if not Confirm.ask(f"[yellow]This will upgrade packages on {len(manager.devices)} device(s). Continue?[/yellow]", default=False):
-        console.print("[dim]Operation cancelled.[/dim]")
-        return
-    
-    # Connect to all devices
-    console.print("[cyan]→[/cyan] Connecting to devices...")
-    for device in manager.devices:
-        manager.connect_to_device(device)
-    
-    # Execute system upgrade
-    upgrade_cmd = "sudo apt upgrade -y" if not safe else "sudo apt safe-upgrade -y"
-    console.print(f"[cyan]→[/cyan] Upgrading packages on devices...")
-    console.print(f"[dim]Command: {upgrade_cmd}[/dim]")
-    
-    results = manager.run_command_on_all(upgrade_cmd, parallel=parallel)
-    
-    # Display results
-    table = Table(title="System Upgrade Results", border_style="cyan")
-    table.add_column("Device", style="bold")
-    table.add_column("Exit Code", style="dim")
-    table.add_column("Output")
-    table.add_column("Error", style="red")
-    
-    for device, (exit_code, stdout, stderr) in results.items():
-        exit_status = "[green]0[/green]" if exit_code == 0 else f"[red]{exit_code}[/red]"
-        output = stdout[:150] + "..." if len(stdout) > 150 else stdout
-        error = stderr[:100] + "..." if len(stderr) > 100 else stderr
-        
-        table.add_row(str(device), exit_status, output, error)
-    
-    console.print(table)
-    
-    # Disconnect
-    for device in manager.devices:
-        manager.disconnect_device(device)
-
-
-@cmd_ssh.command("batch")
-@click.argument("command")
-@click.option("--target", help="Specific device (user@host:port)")
-@click.option("--parallel", is_flag=True, default=True, help="Run in parallel")
-@click.option("--dry-run", is_flag=True, default=False, help="Show command without executing")
-@click.option("--timeout", default=30, help="Command timeout in seconds")
-def cmd_ssh_batch(command: str, target: Optional[str], parallel: bool, dry_run: bool, timeout: int):
-    """Execute custom command on multiple SSH devices."""
-    from .ssh_manager import SSHManager, parse_device_target
-    from pathlib import Path
-    
-    manager = SSHManager()
-    devices_file = Path.home() / ".meshpi" / "ssh_devices.json"
-    
-    if devices_file.exists():
-        manager.load_device_list(str(devices_file))
-    
-    # Filter devices if target specified
-    if target:
-        user, host, port = parse_device_target(target)
-        manager.devices = [d for d in manager.devices if d.host == host and d.user == user and d.port == port]
-    
-    if not manager.devices:
-        console.print("[red]No devices available[/red]")
-        return
-    
-    # Show command and devices
-    console.print(f"[bold cyan]Batch Command Execution[/bold cyan]")
-    console.print(f"[dim]Command: {command}[/dim]")
-    console.print(f"[dim]Devices: {len(manager.devices)}[/dim]")
-    console.print(f"[dim]Parallel: {parallel}[/dim]")
-    
     if dry_run:
-        console.print("\n[yellow]DRY RUN - Command will be executed on:[/yellow]")
-        for device in manager.devices:
-            console.print(f"  • {device}")
+        console.print("[dim]Dry run: not writing changes[/dim]")
         return
-    
-    # Confirm operation
-    if not Confirm.ask(f"[yellow]Execute command on {len(manager.devices)} device(s)?[/yellow]", default=False):
-        console.print("[dim]Operation cancelled.[/dim]")
+
+    if not Confirm.ask(f"Remove {len(removed)} device(s) from list?", default=False):
         return
-    
-    # Connect to all devices
-    console.print("[cyan]→[/cyan] Connecting to devices...")
-    for device in manager.devices:
-        manager.connect_to_device(device)
-    
-    # Execute command
-    console.print(f"[cyan]→[/cyan] Executing command...")
-    results = manager.run_command_on_all(command, parallel=parallel)
-    
-    # Display results
-    table = Table(title="Batch Command Results", border_style="cyan")
-    table.add_column("Device", style="bold")
-    table.add_column("Exit Code", style="dim")
-    table.add_column("Output")
-    table.add_column("Error", style="red")
-    
-    success_count = 0
-    for device, (exit_code, stdout, stderr) in results.items():
-        exit_status = "[green]0[/green]" if exit_code == 0 else f"[red]{exit_code}[/red]"
-        output = stdout[:200] + "..." if len(stdout) > 200 else stdout
-        error = stderr[:100] + "..." if len(stderr) > 100 else stderr
-        
-        table.add_row(str(device), exit_status, output, error)
-        if exit_code == 0:
-            success_count += 1
-    
-    console.print(table)
-    console.print(f"\n[green]Success: {success_count}/{len(manager.devices)} devices[/green]")
-    
-    # Disconnect
-    for device in manager.devices:
-        manager.disconnect_device(device)
+
+    manager.devices = to_keep
+    manager.save_device_list(str(path))
 
 
-@main.group("group")
-def cmd_group():
-    """Group operations for managing multiple devices."""
-    pass
-
-
-@cmd_group.command("create")
-@click.argument("group_name")
-@click.option("--description", help="Group description")
-def cmd_group_create(group_name: str, description: Optional[str]):
-    """Create a new device group."""
+@cmd_ssh.command("group-auto")
+@click.option("--file", "devices_file", default=None, help="Path to ssh_devices.json (default: ~/.meshpi/ssh_devices.json)")
+@click.option("--out", "groups_file", default=None, help="Path to groups.json (default: ~/.meshpi/groups.json)")
+def cmd_ssh_group_auto(devices_file: Optional[str], groups_file: Optional[str]):
+    """Create/update groups from managed SSH devices based on detected type."""
     from .ssh_manager import SSHManager
     from pathlib import Path
     import json
-    
-    groups_file = Path.home() / ".meshpi" / "groups.json"
-    
-    # Load existing groups
-    groups = {}
-    if groups_file.exists():
-        groups = json.loads(groups_file.read_text())
-    
-    if group_name in groups:
-        console.print(f"[red]Group '{group_name}' already exists[/red]")
-        return
-    
-    # Create group
-    groups[group_name] = {
-        "name": group_name,
-        "description": description or "",
-        "devices": [],
-        "created_at": time.time()
-    }
-    
-    # Save groups
-    groups_file.write_text(json.dumps(groups, indent=2))
-    console.print(f"[green]✓ Group '{group_name}' created[/green]")
+    import ipaddress
 
+    manager = SSHManager()
+    path = Path(devices_file) if devices_file else (Path.home() / ".meshpi" / "ssh_devices.json")
+    if path.exists():
+        manager.load_device_list(str(path))
 
-@cmd_group.command("list")
-def cmd_group_list():
-    """List all device groups."""
-    from pathlib import Path
-    import json
-    
-    groups_file = Path.home() / ".meshpi" / "groups.json"
-    
-    if not groups_file.exists():
-        console.print("[yellow]No groups found[/yellow]")
-        return
-    
-    groups = json.loads(groups_file.read_text())
-    
-    if not groups:
-        console.print("[yellow]No groups found[/yellow]")
-        return
-    
-    table = Table(title="Device Groups", border_style="cyan")
-    table.add_column("Group Name", style="bold")
-    table.add_column("Description", style="dim")
-    table.add_column("Devices", style="dim")
-    table.add_column("Created", style="dim")
-    
-    for group_name, group_data in groups.items():
-        device_count = len(group_data.get("devices", []))
-        created = time.strftime("%Y-%m-%d", time.localtime(group_data.get("created_at", 0)))
-        description = group_data.get("description", "—")
-        
-        table.add_row(group_name, description, str(device_count), created)
-    
-    console.print(table)
+    groups_path = Path(groups_file) if groups_file else (Path.home() / ".meshpi" / "groups.json")
+    groups_path.parent.mkdir(parents=True, exist_ok=True)
 
+    groups: dict[str, list[str]] = {}
 
-@cmd_group.command("add-device")
-@click.argument("group_name")
-@click.argument("target")
-def cmd_group_add_device(group_name: str, target: str):
-    """Add device to a group."""
-    from .ssh_manager import parse_device_target
-    from pathlib import Path
-    import json
-    
-    groups_file = Path.home() / ".meshpi" / "groups.json"
-    
-    if not groups_file.exists():
-        console.print("[red]No groups found[/red]")
-        return
-    
-    groups = json.loads(groups_file.read_text())
-    
-    if group_name not in groups:
-        console.print(f"[red]Group '{group_name}' not found[/red]")
-        return
-    
-    # Parse target
-    user, host, port = parse_device_target(target)
-    device_str = f"{user}@{host}:{port}"
-    
-    # Add device to group
-    if device_str not in groups[group_name]["devices"]:
-        groups[group_name]["devices"].append(device_str)
-        groups_file.write_text(json.dumps(groups, indent=2))
-        console.print(f"[green]✓ Added {device_str} to group '{group_name}'[/green]")
-    else:
-        console.print(f"[yellow]Device already in group[/yellow]")
+    for dev in manager.devices:
+        dtype = str(dev.meta.get("type", "unknown")).lower()
+        vendor = str(dev.meta.get("vendor", "")).lower()
+        name = dev.name
 
+        try:
+            ip = ipaddress.ip_address(dev.host)
+        except Exception:
+            ip = None
 
-@cmd_group.command("remove-device")
-@click.argument("group_name")
-@click.argument("target")
-def cmd_group_remove_device(group_name: str, target: str):
-    """Remove device from a group."""
-    from .ssh_manager import parse_device_target
-    from pathlib import Path
-    import json
-    
-    groups_file = Path.home() / ".meshpi" / "groups.json"
-    
-    if not groups_file.exists():
-        console.print("[red]No groups found[/red]")
-        return
-    
-    groups = json.loads(groups_file.read_text())
-    
-    if group_name not in groups:
-        console.print(f"[red]Group '{group_name}' not found[/red]")
-        return
-    
-    # Parse target
-    user, host, port = parse_device_target(target)
-    device_str = f"{user}@{host}:{port}"
-    
-    # Remove device from group
-    if device_str in groups[group_name]["devices"]:
-        groups[group_name]["devices"].remove(device_str)
-        groups_file.write_text(json.dumps(groups, indent=2))
-        console.print(f"[green]✓ Removed {device_str} from group '{group_name}'[/green]")
-    else:
-        console.print(f"[yellow]Device not in group[/yellow]")
-
-
-@cmd_group.command("show")
-@click.argument("group_name")
-def cmd_group_show(group_name: str):
-    """Show details of a specific group."""
-    from pathlib import Path
-    import json
-    
-    groups_file = Path.home() / ".meshpi" / "groups.json"
-    
-    if not groups_file.exists():
-        console.print("[red]No groups found[/red]")
-        return
-    
-    groups = json.loads(groups_file.read_text())
-    
-    if group_name not in groups:
-        console.print(f"[red]Group '{group_name}' not found[/red]")
-        return
-    
-    group_data = groups[group_name]
-    
-    console.print(Panel.fit(
-        f"[bold cyan]Group: {group_name}[/bold cyan]\n"
-        f"[dim]{group_data.get('description', 'No description')}[/dim]",
-        border_style="cyan"
-    ))
-    
-    # Group info
-    info_table = Table(show_header=False, box=None)
-    info_table.add_column("Property", style="cyan")
-    info_table.add_column("Value")
-    
-    created = time.strftime("%Y-%m-%d %H:%M", time.localtime(group_data.get("created_at", 0)))
-    info_table.add_row("Name", group_data["name"])
-    info_table.add_row("Description", group_data.get("description", "—"))
-    info_table.add_row("Devices", str(len(group_data.get("devices", []))))
-    info_table.add_row("Created", created)
-    
-    console.print(info_table)
-    
-    # Device list
-    devices = group_data.get("devices", [])
-    if devices:
-        console.print(f"\n[bold]Devices ({len(devices)}):[/bold]")
-        for i, device in enumerate(devices, 1):
-            console.print(f"  {i}. {device}")
-    else:
-        console.print("\n[dim]No devices in group[/dim]")
-
-
-@cmd_group.command("delete")
-@click.argument("group_name")
-@click.option("--confirm", is_flag=True, default=False, help="Skip confirmation")
-def cmd_group_delete(group_name: str, confirm: bool):
-    """Delete a device group."""
-    from pathlib import Path
-    import json
-    
-    groups_file = Path.home() / ".meshpi" / "groups.json"
-    
-    if not groups_file.exists():
-        console.print("[red]No groups found[/red]")
-        return
-    
-    groups = json.loads(groups_file.read_text())
-    
-    if group_name not in groups:
-        console.print(f"[red]Group '{group_name}' not found[/red]")
-        return
-    
-    device_count = len(groups[group_name].get("devices", []))
-    
-    if not confirm:
-        if not Confirm.ask(
-            f"[red]Delete group '{group_name}' with {device_count} device(s)?[/red]", 
-            default=False
+        if ip and (
+            ip in ipaddress.ip_network("172.17.0.0/16")
+            or ip in ipaddress.ip_network("172.18.0.0/16")
+            or ip in ipaddress.ip_network("172.19.0.0/16")
+            or ip in ipaddress.ip_network("10.42.0.0/24")
         ):
-            console.print("[dim]Operation cancelled.[/dim]")
-            return
-    
-    # Delete group
-    del groups[group_name]
-    groups_file.write_text(json.dumps(groups, indent=2))
-    console.print(f"[green]✓ Group '{group_name}' deleted[/green]")
-
-
-@cmd_group.command("update")
-@click.argument("group_name")
-@click.option("--name", help="New group name")
-@click.option("--description", help="New group description")
-def cmd_group_update(group_name: str, name: Optional[str], description: Optional[str]):
-    """Update group properties."""
-    from pathlib import Path
-    import json
-    
-    groups_file = Path.home() / ".meshpi" / "groups.json"
-    
-    if not groups_file.exists():
-        console.print("[red]No groups found[/red]")
-        return
-    
-    groups = json.loads(groups_file.read_text())
-    
-    if group_name not in groups:
-        console.print(f"[red]Group '{group_name}' not found[/red]")
-        return
-    
-    group_data = groups[group_name]
-    
-    # Update properties
-    if name:
-        # Move group to new key
-        groups[name] = groups.pop(group_name)
-        group_data = groups[name]
-        group_data["name"] = name
-        console.print(f"[green]✓ Group renamed to '{name}'[/green]")
-        group_name = name
-    
-    if description is not None:
-        group_data["description"] = description
-        console.print(f"[green]✓ Description updated[/green]")
-    
-    # Save changes
-    groups_file.write_text(json.dumps(groups, indent=2))
-    console.print(f"[green]✓ Group '{group_name}' updated[/green]")
-
-
-@cmd_group.command("status")
-@click.argument("group_name")
-@click.option("--parallel", is_flag=True, default=True, help="Run in parallel")
-def cmd_group_status(group_name: str, parallel: bool):
-    """Check status of all devices in a group."""
-    from .ssh_manager import SSHManager
-    from pathlib import Path
-    import json
-    
-    groups_file = Path.home() / ".meshpi" / "groups.json"
-    
-    if not groups_file.exists():
-        console.print("[red]No groups found[/red]")
-        return
-    
-    groups = json.loads(groups_file.read_text())
-    
-    if group_name not in groups:
-        console.print(f"[red]Group '{group_name}' not found[/red]")
-        return
-    
-    devices = groups[group_name]["devices"]
-    if not devices:
-        console.print(f"[yellow]No devices in group '{group_name}'[/yellow]")
-        return
-    
-    console.print(f"[bold cyan]Group Status: {group_name}[/bold cyan]")
-    
-    # Create SSH manager and add devices
-    manager = SSHManager()
-    for device_str in devices:
-        user, host, port = parse_device_target(device_str)
-        from .ssh_manager import SSHDevice
-        device = SSHDevice(host, user, port)
-        manager.add_device(device)
-    
-    # Connect and check status
-    console.print("[cyan]→[/cyan] Checking device status...")
-    
-    status_table = Table(title=f"Group '{group_name}' Status", border_style="cyan")
-    status_table.add_column("Device", style="bold")
-    status_table.add_column("Status", style="bold")
-    status_table.add_column("Uptime", style="dim")
-    status_table.add_column("Load", style="dim")
-    status_table.add_column("Memory", style="dim")
-    status_table.add_column("Temp", style="dim")
-    
-    online_count = 0
-    
-    for device in manager.devices:
-        try:
-            if manager.connect_to_device(device):
-                # Get system info
-                info = manager.get_device_info(device)
-                
-                uptime = info.get("uptime", "N/A").split()[0] if info.get("uptime") != "N/A" else "N/A"
-                load = info.get("uptime", "N/A").split("load average:")[1].strip() if "load average:" in info.get("uptime", "") else "N/A"
-                memory = info.get("memory", "N/A").split()[1] if info.get("memory", "N/A") != "N/A" else "N/A"
-                temp = info.get("cpu_temp", "N/A")
-                
-                status_table.add_row(
-                    str(device),
-                    "[green]ONLINE[/green]",
-                    uptime,
-                    load,
-                    memory,
-                    temp
-                )
-                online_count += 1
-            else:
-                status_table.add_row(
-                    str(device),
-                    "[red]OFFLINE[/red]",
-                    "—",
-                    "—",
-                    "—",
-                    "—"
-                )
-        except Exception as e:
-            status_table.add_row(
-                str(device),
-                "[red]ERROR[/red]",
-                str(e)[:20],
-                "—",
-                "—",
-                "—"
-            )
-        finally:
-            manager.disconnect_device(device)
-    
-    console.print(status_table)
-    console.print(f"\n[green]Online: {online_count}/{len(devices)} devices[/green]")
-
-
-@cmd_group.command("system-update")
-@click.argument("group_name")
-@click.option("--parallel", is_flag=True, default=True, help="Run in parallel")
-def cmd_group_system_update(group_name: str, parallel: bool):
-    """Update package lists on all devices in a group."""
-    from .ssh_manager import SSHManager
-    from pathlib import Path
-    import json
-    
-    groups_file = Path.home() / ".meshpi" / "groups.json"
-    
-    if not groups_file.exists():
-        console.print("[red]No groups found[/red]")
-        return
-    
-    groups = json.loads(groups_file.read_text())
-    
-    if group_name not in groups:
-        console.print(f"[red]Group '{group_name}' not found[/red]")
-        return
-    
-    devices = groups[group_name]["devices"]
-    if not devices:
-        console.print(f"[yellow]No devices in group '{group_name}'[/yellow]")
-        return
-    
-    # Create SSH manager and add devices
-    manager = SSHManager()
-    for device_str in devices:
-        user, host, port = parse_device_target(device_str)
-        from .ssh_manager import SSHDevice
-        device = SSHDevice(host, user, port)
-        manager.add_device(device)
-    
-    # Confirm operation
-    console.print(f"[bold cyan]Group System Update[/bold cyan]")
-    console.print(f"[dim]Group: {group_name}[/dim]")
-    console.print(f"[dim]Devices: {len(devices)}[/dim]")
-    
-    if not Confirm.ask(f"[yellow]Update package lists on {len(devices)} device(s)?[/yellow]", default=False):
-        console.print("[dim]Operation cancelled.[/dim]")
-        return
-    
-    # Connect and update
-    console.print("[cyan]→[/cyan] Connecting to devices...")
-    for device in manager.devices:
-        manager.connect_to_device(device)
-    
-    console.print(f"[cyan]→[/cyan] Updating package lists...")
-    results = manager.run_command_on_all("sudo apt update", parallel=parallel)
-    
-    # Display results
-    table = Table(title=f"Group '{group_name}' Update Results", border_style="cyan")
-    table.add_column("Device", style="bold")
-    table.add_column("Exit Code", style="dim")
-    table.add_column("Output")
-    table.add_column("Error", style="red")
-    
-    success_count = 0
-    for device, (exit_code, stdout, stderr) in results.items():
-        exit_status = "[green]0[/green]" if exit_code == 0 else f"[red]{exit_code}[/red]"
-        output = stdout[:150] + "..." if len(stdout) > 150 else stdout
-        error = stderr[:100] + "..." if len(stderr) > 100 else stderr
+            g = "virtual_docker"
         
-        table.add_row(str(device), exit_status, output, error)
-        if exit_code == 0:
-            success_count += 1
-    
-    console.print(table)
-    console.print(f"\n[green]Success: {success_count}/{len(devices)} devices[/green]")
-    
-    # Disconnect
-    for device in manager.devices:
-        manager.disconnect_device(device)
-
-
-@cmd_group.command("exec")
-@click.argument("group_name")
-@click.argument("command")
-@click.option("--parallel", is_flag=True, default=True, help="Run in parallel")
-def cmd_group_exec(group_name: str, command: str, parallel: bool):
-    """Execute command on all devices in a group."""
-    from .ssh_manager import SSHManager
-    from pathlib import Path
-    import json
-    
-    groups_file = Path.home() / ".meshpi" / "groups.json"
-    
-    if not groups_file.exists():
-        console.print("[red]No groups found[/red]")
-        return
-    
-    groups = json.loads(groups_file.read_text())
-    
-    if group_name not in groups:
-        console.print(f"[red]Group '{group_name}' not found[/red]")
-        return
-    
-    devices = groups[group_name]["devices"]
-    if not devices:
-        console.print(f"[yellow]No devices in group '{group_name}'[/yellow]")
-        return
-    
-    # Create SSH manager and add devices
-    manager = SSHManager()
-    for device_str in devices:
-        user, host, port = parse_device_target(device_str)
-        from .ssh_manager import SSHDevice
-        device = SSHDevice(host, user, port)
-        manager.add_device(device)
-    
-    # Confirm operation
-    console.print(f"[bold cyan]Group Command Execution[/bold cyan]")
-    console.print(f"[dim]Group: {group_name}[/dim]")
-    console.print(f"[dim]Command: {command}[/dim]")
-    console.print(f"[dim]Devices: {len(devices)}[/dim]")
-    
-    if not Confirm.ask(f"[yellow]Execute command on {len(devices)} device(s)?[/yellow]", default=False):
-        console.print("[dim]Operation cancelled.[/dim]")
-        return
-    
-    # Connect and execute
-    console.print("[cyan]→[/cyan] Connecting to devices...")
-    for device in manager.devices:
-        manager.connect_to_device(device)
-    
-    console.print(f"[cyan]→[/cyan] Executing command...")
-    results = manager.run_command_on_all(command, parallel=parallel)
-    
-    # Display results
-    table = Table(title=f"Group '{group_name}' Results", border_style="cyan")
-    table.add_column("Device", style="bold")
-    table.add_column("Exit Code", style="dim")
-    table.add_column("Output")
-    table.add_column("Error", style="red")
-    
-    success_count = 0
-    for device, (exit_code, stdout, stderr) in results.items():
-        exit_status = "[green]0[/green]" if exit_code == 0 else f"[red]{exit_code}[/red]"
-        output = stdout[:200] + "..." if len(stdout) > 200 else stdout
-        error = stderr[:100] + "..." if len(stderr) > 100 else stderr
-        
-        table.add_row(str(device), exit_status, output, error)
-        if exit_code == 0:
-            success_count += 1
-    
-    console.print(table)
-    console.print(f"\n[green]Success: {success_count}/{len(devices)} devices[/green]")
-    
-    # Disconnect
-    for device in manager.devices:
-        manager.disconnect_device(device)
-
-
-@cmd_ssh.command("hw-search")
-@click.argument("query", default="")
-@click.option("--category", "-c", default=None,
-              help="Filter by category: display|gpio|sensor|camera|audio|networking|hat|storage")
-@click.option("--tag", "-t", default=None, help="Filter by tag (e.g. 'i2c', 'spi', 'oled')")
-@click.option("--target", help="Specific device (user@host:port)")
-@click.option("--parallel", is_flag=True, default=True, help="Run in parallel")
-def cmd_ssh_hw_search(query: str, category: str, tag: str, target: Optional[str], parallel: bool):
-    """Search hardware profiles on remote SSH device(s)."""
-    from .ssh_manager import SSHManager, parse_device_target
-    from pathlib import Path
-    
-    manager = SSHManager()
-    devices_file = Path.home() / ".meshpi" / "ssh_devices.json"
-    
-    if devices_file.exists():
-        manager.load_device_list(str(devices_file))
-    
-    if target:
-        user, host, port = parse_device_target(target)
-        device = SSHDevice(host, user, port)
-        manager.add_device(device)
-    
-    if not manager.devices:
-        console.print("[red]No devices available. Use 'meshpi ssh add' to add devices.[/red]")
-        return
-    
-    # Connect to devices
-    for device in manager.devices:
-        if not device._connected:
-            manager.connect_to_device(device)
-    
-    # Build search command
-    cmd_parts = ["meshpi", "hw", "search"]
-    if query:
-        cmd_parts.append(query)
-    if category:
-        cmd_parts.extend(["--category", category])
-    if tag:
-        cmd_parts.extend(["--tag", tag])
-    
-    search_cmd = " ".join(cmd_parts)
-    
-    console.print(f"[cyan]→[/cyan] Searching hardware profiles on devices...")
-    console.print(f"[dim]Command: {search_cmd}[/dim]")
-    
-    results = manager.run_command_on_all(search_cmd, parallel=parallel)
-    
-    for device, (exit_code, stdout, stderr) in results.items():
-        console.print(f"\n[bold]{device}:[/bold]")
-        if exit_code == 0:
-            console.print(stdout)
-        else:
-            console.print(f"[red]Error: {stderr}[/red]")
-    
-    # Disconnect
-    for device in manager.devices:
-        manager.disconnect_device(device)
-
-
-@cmd_ssh.command("hw-apply")
-@click.argument("profile_ids", nargs=-1, required=False)
-@click.option("--target", help="Specific device (user@host:port)")
-@click.option("--parallel", is_flag=True, default=True, help="Run in parallel")
-@click.option("--dry-run", is_flag=True, default=False, help="Show what would be installed")
-@click.option("--interactive", "-i", is_flag=True, default=False, help="Interactive profile selection")
-@click.option("--search", "-s", default=None, help="Search profiles before selection")
-def cmd_ssh_hw_apply(profile_ids: tuple, target: Optional[str], parallel: bool, dry_run: bool, interactive: bool, search: str):
-    """Apply hardware profiles on remote SSH device(s)."""
-    from .ssh_manager import SSHManager, parse_device_target
-    from pathlib import Path
-    
-    manager = SSHManager()
-    devices_file = Path.home() / ".meshpi" / "ssh_devices.json"
-    
-    if devices_file.exists():
-        manager.load_device_list(str(devices_file))
-    
-    if target:
-        user, host, port = parse_device_target(target)
-        device = SSHDevice(host, user, port)
-        manager.add_device(device)
-    
-    if not manager.devices:
-        console.print("[red]No devices available. Use 'meshpi ssh add' to add devices.[/red]")
-        return
-    
-    # Connect to devices
-    for device in manager.devices:
-        if not device._connected:
-            manager.connect_to_device(device)
-    
-    # Build apply command
-    cmd_parts = ["meshpi", "hw", "apply"]
-    if dry_run:
-        cmd_parts.append("--dry-run")
-    if interactive:
-        cmd_parts.append("--interactive")
-    if search:
-        cmd_parts.extend(["--search", search])
-    cmd_parts.extend(profile_ids)
-    
-    apply_cmd = " ".join(cmd_parts)
-    
-    console.print(f"[cyan]→[/cyan] Applying hardware profiles on devices...")
-    console.print(f"[dim]Command: {apply_cmd}[/dim]")
-    
-    results = manager.run_command_on_all(apply_cmd, parallel=parallel)
-    
-    for device, (exit_code, stdout, stderr) in results.items():
-        console.print(f"\n[bold]{device}:[/bold]")
-        if exit_code == 0:
-            console.print(stdout)
-        else:
-            console.print(f"[red]Error: {stderr}[/red]")
-    
-    # Disconnect
-    for device in manager.devices:
-        manager.disconnect_device(device)
-
-
-@cmd_ssh.command("hw-create")
-@click.option("--target", help="Specific device (user@host:port)")
-@click.option("--interactive", "-i", is_flag=True, default=True, help="Interactive profile creation")
-@click.option("--import-file", "-f", default=None, help="Import profile from YAML/JSON file")
-@click.option("--name", default=None, help="Profile name")
-@click.option("--category", default=None, help="Profile category")
-@click.option("--description", default=None, help="Profile description")
-@click.option("--packages", default=None, help="Comma-separated apt packages")
-@click.option("--python-packages", default=None, help="Comma-separated pip packages")
-@click.option("--tags", default=None, help="Comma-separated tags")
-def cmd_ssh_hw_create(target: Optional[str], interactive: bool, import_file: str, 
-                     name: str, category: str, description: str, packages: str, python_packages: str, tags: str):
-    """Create custom hardware profiles on remote SSH device(s)."""
-    from .ssh_manager import SSHManager, parse_device_target
-    from pathlib import Path
-    
-    manager = SSHManager()
-    devices_file = Path.home() / ".meshpi" / "ssh_devices.json"
-    
-    if devices_file.exists():
-        manager.load_device_list(str(devices_file))
-    
-    if target:
-        user, host, port = parse_device_target(target)
-        device = SSHDevice(host, user, port)
-        manager.add_device(device)
-    
-    if not manager.devices:
-        console.print("[red]No devices available. Use 'meshpi ssh add' to add devices.[/red]")
-        return
-    
-    # Connect to devices
-    for device in manager.devices:
-        if not device._connected:
-            manager.connect_to_device(device)
-    
-    # Build create command
-    cmd_parts = ["meshpi", "hw", "create"]
-    if interactive:
-        cmd_parts.append("--interactive")
-    if import_file:
-        cmd_parts.extend(["--import-file", import_file])
-    if name:
-        cmd_parts.extend(["--name", name])
-    if category:
-        cmd_parts.extend(["--category", category])
-    if description:
-        cmd_parts.extend(["--description", description])
-    if packages:
-        cmd_parts.extend(["--packages", packages])
-    if python_packages:
-        cmd_parts.extend(["--python-packages", python_packages])
-    if tags:
-        cmd_parts.extend(["--tags", tags])
-    
-    create_cmd = " ".join(cmd_parts)
-    
-    console.print(f"[cyan]→[/cyan] Creating custom hardware profiles on devices...")
-    console.print(f"[dim]Command: {create_cmd}[/dim]")
-    
-    results = manager.run_command_on_all(create_cmd, parallel=False)  # Sequential for interactive
-    
-    for device, (exit_code, stdout, stderr) in results.items():
-        console.print(f"\n[bold]{device}:[/bold]")
-        if exit_code == 0:
-            console.print(stdout)
-        else:
-            console.print(f"[red]Error: {stderr}[/red]")
-    
-    # Disconnect
-    for device in manager.devices:
-        manager.disconnect_device(device)
-
-
-@cmd_ssh.command("hw-custom")
-@click.option("--target", help="Specific device (user@host:port)")
-@click.option("--parallel", is_flag=True, default=True, help="Run in parallel")
-def cmd_ssh_hw_custom(target: Optional[str], parallel: bool):
-    """List custom hardware profiles on remote SSH device(s)."""
-    from .ssh_manager import SSHManager, parse_device_target
-    from pathlib import Path
-    
-    manager = SSHManager()
-    devices_file = Path.home() / ".meshpi" / "ssh_devices.json"
-    
-    if devices_file.exists():
-        manager.load_device_list(str(devices_file))
-    
-    if target:
-        user, host, port = parse_device_target(target)
-        device = SSHDevice(host, user, port)
-        manager.add_device(device)
-    
-    if not manager.devices:
-        console.print("[red]No devices available. Use 'meshpi ssh add' to add devices.[/red]")
-        return
-    
-    # Connect to devices
-    for device in manager.devices:
-        if not device._connected:
-            manager.connect_to_device(device)
-    
-    console.print(f"[cyan]→[/cyan] Listing custom hardware profiles on devices...")
-    
-    results = manager.run_command_on_all("meshpi hw custom", parallel=parallel)
-    
-    for device, (exit_code, stdout, stderr) in results.items():
-        console.print(f"\n[bold]{device}:[/bold]")
-        if exit_code == 0:
-            console.print(stdout)
-        else:
-            console.print(f"[red]Error: {stderr}[/red]")
-    
-    # Disconnect
-    for device in manager.devices:
-        manager.disconnect_device(device)
-
-
-@cmd_ssh.command("hw-list")
-@click.option("--category", "-c", default=None,
-              help="Filter by category: display|gpio|sensor|camera|audio|networking|hat|storage")
-@click.option("--tag", "-t", default=None, help="Filter by tag (e.g. 'i2c', 'spi', 'oled')")
-@click.option("--target", help="Specific device (user@host:port)")
-@click.option("--parallel", is_flag=True, default=True, help="Run in parallel")
-def cmd_ssh_hw_list(category: str, tag: str, target: Optional[str], parallel: bool):
-    """List hardware profiles on remote SSH device(s)."""
-    from .ssh_manager import SSHManager, parse_device_target
-    from pathlib import Path
-    
-    manager = SSHManager()
-    devices_file = Path.home() / ".meshpi" / "ssh_devices.json"
-    
-    if devices_file.exists():
-        manager.load_device_list(str(devices_file))
-    
-    if target:
-        user, host, port = parse_device_target(target)
-        device = SSHDevice(host, user, port)
-        manager.add_device(device)
-    
-    if not manager.devices:
-        console.print("[red]No devices available. Use 'meshpi ssh add' to add devices.[/red]")
-        return
-    
-    # Connect to devices
-    for device in manager.devices:
-        if not device._connected:
-            manager.connect_to_device(device)
-    
-    # Build list command
-    cmd_parts = ["meshpi", "hw", "list"]
-    if category:
-        cmd_parts.extend(["--category", category])
-    if tag:
-        cmd_parts.extend(["--tag", tag])
-    
-    list_cmd = " ".join(cmd_parts)
-    
-    console.print(f"[cyan]→[/cyan] Listing hardware profiles on devices...")
-    console.print(f"[dim]Command: {list_cmd}[/dim]")
-    
-    results = manager.run_command_on_all(list_cmd, parallel=parallel)
-    
-    for device, (exit_code, stdout, stderr) in results.items():
-        console.print(f"\n[bold]{device}:[/bold]")
-        if exit_code == 0:
-            console.print(stdout)
-        else:
-            console.print(f"[red]Error: {stderr}[/red]")
-    
-    # Disconnect
-    for device in manager.devices:
-        manager.disconnect_device(device)
-
-
-@cmd_ssh.command("transfer")
-@click.argument("local_path")
-@click.argument("remote_path")
-@click.option("--target", help="Specific device (user@host:port)")
-@click.option("--download", is_flag=True, default=False, help="Download from device instead of upload")
-def cmd_ssh_transfer(local_path: str, remote_path: str, target: Optional[str], download: bool):
-    """Transfer files to/from SSH device(s)."""
-    from .ssh_manager import SSHManager, parse_device_target
-    from pathlib import Path
-    
-    manager = SSHManager()
-    devices_file = Path.home() / ".meshpi" / "ssh_devices.json"
-    
-    if devices_file.exists():
-        manager.load_device_list(str(devices_file))
-    
-    # Filter devices if target specified
-    if target:
-        user, host, port = parse_device_target(target)
-        manager.devices = [d for d in manager.devices if d.host == host and d.user == user and d.port == port]
-    
-    if not manager.devices:
-        console.print("[red]No devices available[/red]")
-        return
-    
-    # Connect and transfer
-    for device in manager.devices:
-        if manager.connect_to_device(device):
-            if download:
-                success = manager.transfer_file_from_device(device, remote_path, local_path)
-                action = "downloaded from"
+        elif "raspberry" in vendor or "raspberry pi" in vendor or "raspberry" in dtype:
+            if "pi 4" in dtype or "rpi4" in dtype:
+                g = "rpi4"
+            elif "pi 3" in dtype or "rpi3" in dtype:
+                g = "rpi3"
             else:
-                success = manager.transfer_file_to_device(device, local_path, remote_path)
-                action = "uploaded to"
-            
-            if success:
-                console.print(f"[green]✓ File {action} {device}[/green]")
-            else:
-                console.print(f"[red]✗ Transfer failed for {device}[/red]")
-            
-            manager.disconnect_device(device)
+                g = "raspberry_pi"
+        elif "router" in dtype or "gateway" in dtype:
+            g = "router"
+        else:
+            g = "unknown"
+
+        groups.setdefault(g, []).append(name)
+
+    groups_path.write_text(json.dumps(groups, indent=2))
+    console.print(f"[green]✓[/green] Wrote {len(groups)} group(s) to [bold]{groups_path}[/bold]")
 
 
 def auto_detect_rpi_devices() -> list[DeviceRecord]:
@@ -3666,76 +2453,16 @@ def auto_detect_rpi_devices() -> list[DeviceRecord]:
     """
     from .ssh_manager import SSHManager
     from .registry import DeviceRecord
-    import socket
     from ipaddress import ip_network
     from rich.progress import Progress
-    
     discovered = []
-    
+ 
     # Get local network range - only scan the specific subnet the interface is connected to
     try:
-        # Get local IP and interface by connecting to a remote address
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-            s.connect(("8.8.8.8", 80))
-            local_ip = s.getsockname()[0]
-        
-        # Try to get network interface information using standard library
-        network = None
-        
-        # Method 1: Try to read from /proc/net/route to get the interface and gateway
-        try:
-            with open('/proc/net/route', 'r') as f:
-                for line in f:
-                    parts = line.strip().split('\t')
-                    if len(parts) >= 2:
-                        interface = parts[0]
-                        # Get IP address for this interface
-                        try:
-                            import fcntl
-                            import struct
-                            siockgifaddr = 0x8915  # Magic number for SIOCGIFADDR
-                            sockfd = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                            
-                            # Get IP address of the interface
-                            try:
-                                ifreq = struct.pack('16sH14s', interface.encode(), socket.AF_INET, b'\x00'*14)
-                                result = fcntl.ioctl(sockfd.fileno(), siockgifaddr, ifreq)
-                                ip_bytes = result[20:24]
-                                interface_ip = socket.inet_ntoa(ip_bytes)
-                                
-                                if interface_ip == local_ip:
-                                    # Get netmask for this interface
-                                    siockifnetmask = 0x891B  # Magic number for SIOCGIFNETMASK
-                                    try:
-                                        ifreq = struct.pack('16sH14s', interface.encode(), socket.AF_INET, b'\x00'*14)
-                                        result = fcntl.ioctl(sockfd.fileno(), siockifnetmask, ifreq)
-                                        netmask_bytes = result[20:24]
-                                        netmask = socket.inet_ntoa(netmask_bytes)
-                                        
-                                        # Calculate network using ipaddress module
-                                        import ipaddress
-                                        ip_interface = ipaddress.IPv4Interface(f"{local_ip}/{netmask}")
-                                        network = str(ip_interface.network)
-                                        break
-                                    except:
-                                        pass
-                            finally:
-                                sockfd.close()
-                        except:
-                            pass
-        except:
-            pass
-        
-        # Method 2: If above fails, use a more conservative approach - only scan the local /24
+        network, _gateway = SSHManager.detect_primary_network()
         if not network:
-            if '.' in local_ip and (local_ip.startswith('192.168.') or local_ip.startswith('10.') or local_ip.startswith('172.')):
-                parts = local_ip.split('.')
-                # Only scan the /24 that contains our local IP, not all possible subnets
-                network = f"{parts[0]}.{parts[1]}.{parts[2]}.0/24"
-            else:
-                network = "192.168.1.0/24"  # fallback
-                
-    except:
+            network = "192.168.1.0/24"  # fallback
+    except Exception:
         network = "192.168.1.0/24"  # fallback
     
     console.print(f"[dim]Scanning network {network} for Raspberry Pi devices...[/dim]")

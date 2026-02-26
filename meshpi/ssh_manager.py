@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import paramiko
+import psutil
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, TaskID
@@ -35,12 +36,14 @@ class SSHDevice:
     """Represents a managed SSH device."""
     
     def __init__(self, host: str, user: str = "pi", port: int = 22, 
-                 name: Optional[str] = None, tags: Optional[List[str]] = None):
+                 name: Optional[str] = None, tags: Optional[List[str]] = None,
+                 meta: Optional[Dict[str, Any]] = None):
         self.host = host
         self.user = user
         self.port = port
         self.name = name or host
         self.tags = tags or []
+        self.meta: Dict[str, Any] = meta or {}
         self.client: Optional[paramiko.SSHClient] = None
         self._connected = False
         self._info: Optional[Dict[str, Any]] = None
@@ -58,19 +61,125 @@ class SSHManager:
     def __init__(self):
         self.devices: List[SSHDevice] = []
         self.default_key_path = Path.home() / ".ssh" / "id_rsa"
-    
+
+    @staticmethod
+    def detect_primary_network() -> tuple[Optional[str], Optional[str]]:
+        """Return (cidr, gateway_ip) for the primary (routed) IPv4 network.
+
+        Prefers the interface used by the default route and ignores common
+        virtual/container interfaces.
+        """
+        exclude_prefixes = (
+            "lo",
+            "docker",
+            "br-",
+            "veth",
+            "cni",
+            "flannel",
+            "virbr",
+            "podman",
+            "zt",
+            "tailscale",
+            "wg",
+        )
+
+        try:
+            gateway_ip: Optional[str] = None
+            iface: Optional[str] = None
+
+            with open("/proc/net/route", "r") as f:
+                for line in f:
+                    parts = line.strip().split("\t")
+                    if len(parts) < 8:
+                        continue
+                    ifname, dest_hex, gateway_hex, flags_hex, _, _, _, mask_hex = parts[:8]
+                    if dest_hex != "00000000" or mask_hex != "00000000":
+                        continue
+                    if any(ifname.startswith(p) for p in exclude_prefixes):
+                        continue
+                    try:
+                        flags = int(flags_hex, 16)
+                        if flags & 0x2 == 0:
+                            continue
+                    except Exception:
+                        continue
+
+                    iface = ifname
+                    try:
+                        gw_int = int(gateway_hex, 16)
+                        gateway_ip = ".".join(str((gw_int >> (8 * i)) & 0xFF) for i in range(4))
+                    except Exception:
+                        gateway_ip = None
+                    break
+
+            if not iface:
+                return None, None
+
+            addrs = psutil.net_if_addrs().get(iface, [])
+            ipv4 = next((a for a in addrs if getattr(a, "family", None) and int(a.family) == 2), None)
+            if not ipv4 or not ipv4.address or not ipv4.netmask:
+                return None, gateway_ip
+
+            import ipaddress
+
+            network = ipaddress.IPv4Interface(f"{ipv4.address}/{ipv4.netmask}").network
+            return str(network), gateway_ip
+        except Exception:
+            return None, None
+
+    @staticmethod
+    def ip_neighbors() -> Dict[str, str]:
+        """Return mapping ip -> mac from the local neighbor table (ip neigh)."""
+        try:
+            result = subprocess.run(
+                ["ip", "neigh"],
+                capture_output=True,
+                text=True,
+                timeout=3,
+            )
+            if result.returncode != 0:
+                return {}
+            mapping: Dict[str, str] = {}
+            for line in result.stdout.splitlines():
+                # Example: 192.168.188.1 dev wlp90s0 lladdr 68:1d:ef:30:74:48 REACHABLE
+                parts = line.split()
+                if not parts:
+                    continue
+                ip = parts[0]
+                if "lladdr" in parts:
+                    idx = parts.index("lladdr")
+                    if idx + 1 < len(parts):
+                        mac = parts[idx + 1]
+                        if ":" in mac:
+                            mapping[ip] = mac.lower()
+            return mapping
+        except Exception:
+            return {}
+
+    @staticmethod
+    def mac_vendor(mac: Optional[str]) -> Optional[str]:
+        if not mac:
+            return None
+        try:
+            from manuf import manuf
+
+            parser = manuf.MacParser()
+            return parser.get_manuf(mac) or None
+        except Exception:
+            return None
+
     def add_device(self, device: SSHDevice) -> None:
         """Add a device to management."""
         if device not in self.devices:
             self.devices.append(device)
             console.print(f"[green]✓[/green] Added device: [bold]{device}[/bold]")
-    
+
     def remove_device(self, device: SSHDevice) -> None:
         """Remove a device from management."""
         if device in self.devices:
             self.devices.remove(device)
             console.print(f"[yellow]✓[/yellow] Removed device: [bold]{device}[/bold]")
-    
+
     def scan_network(self, network: str = "192.168.1.0/24", 
                      user: str = "pi", port: int = 22,
                      timeout: int = 5) -> List[SSHDevice]:
@@ -90,7 +199,7 @@ class SSHManager:
         
         # Fallback to simple port scan
         return self._simple_port_scan(network, port, user, timeout)
-    
+
     def _parse_nmap_output(self, output: str, user: str, port: int) -> List[SSHDevice]:
         """Parse nmap output to find open SSH ports."""
         devices = []
@@ -104,7 +213,7 @@ class SSHManager:
                         devices.append(SSHDevice(ip, user, port))
                         break
         return devices
-    
+
     def _simple_port_scan(self, network: str, port: int, user: str, timeout: int) -> List[SSHDevice]:
         """Simple port scan using Python sockets."""
         import socket
@@ -130,7 +239,7 @@ class SSHManager:
                     sock.close()
         
         return devices
-    
+
     def connect_to_device(self, device: SSHDevice, 
                          password: Optional[str] = None,
                          key_path: Optional[str] = None) -> bool:
@@ -160,13 +269,13 @@ class SSHManager:
         except Exception as e:
             console.print(f"[red]✗ Failed to connect to {device}: {e}[/red]")
             return False
-    
+
     def disconnect_device(self, device: SSHDevice) -> None:
         """Disconnect from a device."""
         if device.client:
             device.client.close()
             device._connected = False
-    
+
     def get_device_info(self, device: SSHDevice) -> Dict[str, Any]:
         """Collect device information."""
         if not device._connected:
@@ -193,7 +302,7 @@ class SSHManager:
         
         device._info = info
         return info
-    
+
     def run_command_on_device(self, device: SSHDevice, command: str) -> tuple[int, str, str]:
         """Run command on specific device."""
         if not device._connected or not device.client:
@@ -205,7 +314,7 @@ class SSHManager:
             stdout.read().decode("utf-8", errors="replace"),
             stderr.read().decode("utf-8", errors="replace"),
         )
-    
+
     def run_command_on_all(self, command: str, 
                            parallel: bool = True) -> Dict[SSHDevice, tuple[int, str, str]]:
         """Run command on all connected devices."""
@@ -231,7 +340,7 @@ class SSHManager:
                     results[device] = self.run_command_on_device(device, command)
         
         return results
-    
+
     def transfer_file_to_device(self, device: SSHDevice, 
                                 local_path: str, remote_path: str) -> bool:
         """Transfer file to device using SCP."""
@@ -246,7 +355,7 @@ class SSHManager:
         except Exception as e:
             console.print(f"[red]✗ File transfer failed to {device}: {e}[/red]")
             return False
-    
+
     def transfer_file_from_device(self, device: SSHDevice,
                                 remote_path: str, local_path: str) -> bool:
         """Transfer file from device using SCP."""
@@ -261,7 +370,7 @@ class SSHManager:
         except Exception as e:
             console.print(f"[red]✗ File transfer failed from {device}: {e}[/red]")
             return False
-    
+
     def install_meshpi_on_device(self, device: SSHDevice, 
                                  method: str = "pip") -> bool:
         """Install MeshPi on remote device."""
@@ -298,7 +407,7 @@ class SSHManager:
         
         console.print(f"[green]✓[/green] MeshPi installed on {device}")
         return True
-    
+
     def update_meshpi_on_device(self, device: SSHDevice) -> bool:
         """Update MeshPi on remote device."""
         if not device._connected:
@@ -318,7 +427,7 @@ class SSHManager:
         
         console.print(f"[green]✓[/green] MeshPi updated on {device}")
         return True
-    
+
     def restart_meshpi_on_device(self, device: SSHDevice, 
                                 service: str = "meshpi-daemon") -> bool:
         """Restart MeshPi service on remote device."""
@@ -340,7 +449,7 @@ class SSHManager:
         
         console.print(f"[yellow]⚠[/yellow] No MeshPi service found on {device}")
         return False
-    
+
     def list_devices_table(self) -> None:
         """Display all devices in a table."""
         table = Table(title="Managed SSH Devices", border_style="cyan")
@@ -350,21 +459,27 @@ class SSHManager:
         table.add_column("Port", style="dim")
         table.add_column("Status", style="bold")
         table.add_column("Tags", style="dim")
+        table.add_column("Type", style="dim")
+        table.add_column("Vendor", style="dim")
         
         for device in self.devices:
             status = "[green]Connected[/green]" if device._connected else "[dim]Disconnected[/dim]"
             tags_str = ", ".join(device.tags) if device.tags else "—"
+            dtype = str(device.meta.get("type", "—"))
+            vendor = str(device.meta.get("vendor", "—"))
             table.add_row(
                 device.name,
                 device.host,
                 device.user,
                 str(device.port),
                 status,
-                tags_str
+                tags_str,
+                dtype,
+                vendor,
             )
         
         console.print(table)
-    
+
     def save_device_list(self, filepath: str) -> None:
         """Save device list to JSON file."""
         devices_data = []
@@ -375,11 +490,12 @@ class SSHManager:
                 "port": device.port,
                 "name": device.name,
                 "tags": device.tags,
+                "meta": device.meta,
             })
         
         Path(filepath).write_text(json.dumps(devices_data, indent=2))
         console.print(f"[green]✓[/green] Device list saved to [bold]{filepath}[/bold]")
-    
+
     def load_device_list(self, filepath: str) -> None:
         """Load device list from JSON file."""
         if not Path(filepath).exists():
@@ -396,7 +512,8 @@ class SSHManager:
                     user=device_data.get("user", "pi"),
                     port=device_data.get("port", 22),
                     name=device_data.get("name"),
-                    tags=device_data.get("tags", [])
+                    tags=device_data.get("tags", []),
+                    meta=device_data.get("meta", {}),
                 )
                 self.devices.append(device)
             

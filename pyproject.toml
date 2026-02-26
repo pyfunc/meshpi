@@ -69,6 +69,7 @@ dependencies = [
     "uvicorn>=0.27",
     "fastapi>=0.109",
     "psutil>=5.9",
+    "manuf>=1.1.5",
 ]
 
 [project.optional-dependencies]
